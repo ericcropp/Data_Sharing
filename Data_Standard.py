@@ -1,4 +1,56 @@
 # from abc import ABC, abstractmethod
+"""
+Module: Data_Standard.py
+This module defines the DataPoint and SimulatedDataPoint classes for representing and managing data points (i.e. runs 
+of the accelerator or simulation),including input parameters, distributions, lattice information, outputs, and metadata. 
+The classes provide validation, unique identification, summary extraction, and serialization to HDF5 format.
+
+Notes:
+1) The lattice specification should eventually point to or be a PALS standard.  That is not currently implemented
+2) In general, for both experimental and simulation data, lattice information is treated as default unless overridden 
+by other input information.
+3) Generally, for a batch of DataPoint objects, a batch YAML file lists all the summary data and locations of the files
+for easy indexing.  Examples are shown in other files in the repo.  
+4) Future to-do: batches can be put in a single h5 file, with shared information stored once.  This is not yet implemented.
+
+Classes:
+--------
+class DataPoint(BaseModel):
+    Represents a single data point (i.e. experimental shot or simulation run) for simulation or experimental data.
+    Attributes:
+        scalar_inputs (dict[str, float]): Scalar input parameters for the simulation.
+        input_distribution (Union[ParticleGroup, np.ndarray]): Input particle distribution or array.
+        lattice_location (str): Location of the lattice ('included' or other). If included, lattice data must be provided.
+        lattice (Any, optional): Lattice data, required if lattice_location == 'included'.
+        output_list (list): List of output data dictionaries.
+        summary_keys (list[str]): Keys to include in the summary.
+        summary_location (Union[str, float]): Location for summary extraction ('final' or specific value). Default is 'final'. 
+        ID (str): Unique identifier for the data point (MD5 hash).
+        run_information (dict): Metadata about the simulation run.
+        outputs (dict): Dictionary of outputs.
+        summary (dict): Summary dictionary.
+        scalar_output_list (list): List of scalar output names.
+        input_distribution_attrs (dict): Attributes for input distribution.
+    Methods:
+        validate_inputs(values): Validates and normalizes input data before model creation.
+        __init__(**data): Initializes the DataPoint and generates a unique ID.
+        add_data(location, datum, attrs, datum_type, datum_name): Adds output data to the output_list.
+        make_ID(): Generates a unique ID based on scalar_inputs and lattice_location.
+        get_summary(): Extracts summary values based on summary_keys and summary_location.
+        saveHDF5(fileloc): Serializes the DataPoint to an HDF5 file.
+    Usage:
+        Create a DataPoint instance with required inputs, add output data, and save to HDF5.
+class SimulatedDataPoint(DataPoint):
+    Extends DataPoint to include simulation-specific metadata.
+    Additional Attributes:
+        simulation_start (Union[str, float]): Simulation start time or identifier.
+        simulation_end (Union[str, float]): Simulation end time or identifier.
+        simulation_code (str): Name of the simulation code used.
+        simulation_input_file (str): Path or identifier for the simulation input file.
+    Usage:
+        Use SimulatedDataPoint for data points that require simulation metadata.
+
+"""        
 from pydantic import BaseModel,model_validator
 import hashlib
 from typing import Union,Any
@@ -250,29 +302,3 @@ class SimulatedDataPoint(DataPoint, BaseModel):
     simulation_code: str
     simulation_input_file: str
 
-    # def __init__(
-    #     self,
-    #     scalar_inputs,
-    #     input_distribution,
-    #     input_distribution_attrs,  # <-- Add this argument
-    #     lattice_location,
-    #     summary_keys,
-    #     run_information,
-    #     simulation_start,
-    #     simulation_end,
-    #     simulation_code,
-    #     simulation_input_file
-    # ):
-    #     super().__init__(
-    #         scalar_inputs=scalar_inputs,
-    #         input_distribution=input_distribution,
-    #         input_distribution_attrs=input_distribution_attrs,  # <-- Pass to super
-    #         lattice_location=lattice_location,
-    #         summary_keys=summary_keys,
-    #         run_information=run_information
-    #     )
-    #     self.simulation_start = simulation_start
-    #     self.simulation_end = simulation_end
-    #     self.simulation_code = simulation_code
-    #     self.simulation_input_file = simulation_input_file
-        
