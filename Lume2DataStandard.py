@@ -1,4 +1,41 @@
+"""
+This script processes a batch of Impact simulation archives, compares their input lattice and header data to a reference YAML file,
+extracts differences, and saves simulation results in a standardized HDF5 format. It also generates a summary table of key data points.
+
+General Comments:
+- The script expects a YAML file ('Impact_Filenames.yaml') listing Impact archive filenames.
+- For each archive, it loads simulation data, compares input parameters to a reference ('ImpactT.yaml'), and records differences.
+- Additional simulation files (rfdata4, rfdata5, etc.) are read and included in the output.
+- Results are encapsulated in SimulatedDataPoint objects and saved to disk.
+- A summary table of results is exported to YAML.
+
+Main Steps:
+1. Load Impact archive filenames from YAML.
+2. For each archive:
+    - Load simulation data and reference input.
+    - Compare lattice and header data, recording differences.
+    - Read auxiliary simulation files.
+    - Create and populate SimulatedDataPoint objects.
+    - Save results to HDF5.
+    - Update summary table.
+3. Export summary table to YAML.
+
+Dependencies:
+- numpy
+- pandas
+- yaml
+- impact (custom module)
+- Data_Standard (custom module)
+- os
+
+Note:
+- The script assumes the existence of several input files in the working directory.
+- Output is saved in './Test_Sim_Data/'.
+
+"""
+
 import numpy as np
+
 from Data_Standard import DataPoint, SimulatedDataPoint
 
 import pandas as pd

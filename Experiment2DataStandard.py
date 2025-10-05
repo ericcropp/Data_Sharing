@@ -1,3 +1,26 @@
+
+"""
+Experiment2DataStandard.py
+This script processes real experimental data from the FACET-II Injector, 
+loading scalar and image data from disk, formatting it into standardized DataPoint objects, 
+and saving the results in HDF5 format. It also generates a summary table of key data attributes and saves it as a YAML file.
+Main Steps:
+- Loads scalar and image data from specified files.
+- Defines input and output columns for data extraction.
+- Iterates over a subset of data points, constructing DataPoint objects with relevant metadata and distributions.
+- Aggregates scalar outputs by unique suffix for compact storage.
+- Saves each DataPoint to disk in HDF5 format.
+- Compiles a summary table of selected attributes and metadata, saving it as YAML.
+Dependencies:
+- numpy
+- pandas
+- os
+- yaml
+- Data_Standard (provides DataPoint and SimulatedDataPoint classes)
+Note:
+- Assumes existence of specific data files and directory structure.
+- Intended for use in data standardization and archival for FACET-II Injector experiments.
+"""
 import numpy as np
 from Data_Standard import DataPoint, SimulatedDataPoint
 
@@ -151,8 +174,25 @@ for i in range(10):
         summary_keys=summary_keys,
         run_information=metadata
     )
+    unique_suffix_dict = {}
     for col in scalar_output_cols:
-        D.add_data(location=col, datum=all_data[col].iloc[i], attrs={}, datum_name=col, datum_type='scalar')
+        parts = col.split(':')
+        suffix = parts[-1]
+        prefix = ':'.join(parts[:-1])
+        if suffix not in unique_suffix_dict:
+            unique_suffix_dict[suffix] = []
+        unique_suffix_dict[suffix].append(prefix)
+
+    for unique_suffix, prefixes in unique_suffix_dict.items():
+        data = np.array([
+            float(all_data.get(prefix + ':' + unique_suffix, np.nan).iloc[i])
+            if (prefix + ':' + unique_suffix) in all_data.columns and pd.notnull(all_data[prefix + ':' + unique_suffix].iloc[i])
+            else np.nan
+            for prefix in prefixes
+        ], dtype=float)
+        D.add_data(location=prefixes, datum=data, attrs={}, datum_name=unique_suffix, datum_type='scalar')
+    # for col in scalar_output_cols:
+    #     D.add_data(location=col, datum=all_data[col].iloc[i], attrs={}, datum_name=col, datum_type='scalar')
     D.add_data(location='PROF:IN10:571', datum=all_images[i,:,:], attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image')
     D.saveHDF5('./Test_Data/')
     entry = {
