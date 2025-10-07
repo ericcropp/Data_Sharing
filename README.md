@@ -7,11 +7,12 @@ The **Data_Standard** project provides a unified format for storing both simulat
 - Support for multiple data types (e.g., ParticleGroups, scalars, images, metadata) and simulations AND experimental data
 - Extensible format for future requirements
 
-Examples for formatting FACET-II experimental data are contained in **Experiment2DataStandard.py**
+Examples for formatting FACET-II experimental data are contained in **Experiment2DataStandard2.py**
 
-Examples for formatting simulations of the same beamline, using a custom lattice (so lattice is included) are shown in **Lume2DataStandard.py**
+Examples for formatting simulations of the same beamline, using a custom lattice (so lattice is included) are shown in **Lume2DataStandard2.py**
 
-The results of the real data example are shown in **Test_Data/**
+The results of the real data example are shown in **Test_Data2/**
 
-The results of the simulated data example are shown in **Test_Sim_Data**
+The results of the simulated data example are shown in **Test_Sim_Data2/**
 
+The standard data classes are found in Data_Standard_2.py
