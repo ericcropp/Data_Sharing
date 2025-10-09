@@ -1,30 +1,3 @@
-- CQ10121:b1_gradient: 0.02615656253054357
-  GUNF:rf_field_scale: 58590873.594338775
-  GUNF:theta0_deg: -71.48051088395528
-  ID: eecd64266c9996788873c26884836ef9
-  L0AF_body_1:rf_field_scale: 32938598.97332247
-  L0AF_body_1:theta0_deg: 331.74204477679046
-  L0AF_body_2:rf_field_scale: 32938598.97332247
-  L0AF_body_2:theta0_deg: 391.74204477679046
-  L0AF_entrance:rf_field_scale: 28515585.822135366
-  L0AF_entrance:theta0_deg: 301.74204477679046
-  L0AF_exit:rf_field_scale: 28515585.822135366
-  L0AF_exit:theta0_deg: 301.74204477679046
-  SOL10111:solenoid_field_scale: 0.31813941478244445
-  SQ10122:b1_gradient: -0.07495236956386314
-  header:Bcurr: 2.9516188800000003
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
-  header:Temission: 1.0646278341957971e-11
-  header:Tini: -5.328314900789638e-12
-  norm_emit_x: 6.1247201e-06
-  simulation_code: Impact
-  simulation_end: '4.200085335255858'
-  simulation_start: '0.0'
-  stop_1:s: 4.2
 - CQ10121:b1_gradient: 0.024517506522024037
   GUNF:rf_field_scale: 58602981.27742918
   GUNF:theta0_deg: -71.64991292145612
@@ -50,114 +23,6 @@
   norm_emit_x: 5.9995838e-06
   simulation_code: Impact
   simulation_end: '4.200049533654878'
-  simulation_start: '0.0'
-  stop_1:s: 4.2
-- CQ10121:b1_gradient: 0.02615656253054357
-  GUNF:rf_field_scale: 59212689.49819795
-  GUNF:theta0_deg: -73.00512922146288
-  ID: 62bfcbe5d67dccf2b5a7cd1320047607
-  L0AF_body_1:rf_field_scale: 32938598.97332247
-  L0AF_body_1:theta0_deg: 331.61231436541766
-  L0AF_body_2:rf_field_scale: 32938598.97332247
-  L0AF_body_2:theta0_deg: 391.61231436541766
-  L0AF_entrance:rf_field_scale: 28515585.822135366
-  L0AF_entrance:theta0_deg: 301.61231436541766
-  L0AF_exit:rf_field_scale: 28515585.822135366
-  L0AF_exit:theta0_deg: 301.61231436541766
-  SOL10111:solenoid_field_scale: 0.31773029241910705
-  SQ10122:b1_gradient: -0.07495236956386314
-  header:Bcurr: 2.880276
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
-  header:Temission: 1.0646278341957971e-11
-  header:Tini: -5.328314900789638e-12
-  norm_emit_x: 6.2245166e-06
-  simulation_code: Impact
-  simulation_end: '4.200102417403867'
-  simulation_start: '0.0'
-  stop_1:s: 4.2
-- CQ10121:b1_gradient: 0.02615656253054357
-  GUNF:rf_field_scale: 59325542.2705497
-  GUNF:theta0_deg: -73.65284289426025
-  ID: 11157e22ca6ec92d5c6599b60912419e
-  L0AF_body_1:rf_field_scale: 32938598.97332247
-  L0AF_body_1:theta0_deg: 331.7049789449697
-  L0AF_body_2:rf_field_scale: 32938598.97332247
-  L0AF_body_2:theta0_deg: 391.7049789449697
-  L0AF_entrance:rf_field_scale: 28515585.822135366
-  L0AF_entrance:theta0_deg: 301.7049789449697
-  L0AF_exit:rf_field_scale: 28515585.822135366
-  L0AF_exit:theta0_deg: 301.7049789449697
-  SOL10111:solenoid_field_scale: 0.31670748651076364
-  SQ10122:b1_gradient: -0.07495236956386314
-  header:Bcurr: 2.93179824
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
-  header:Temission: 1.0646278341957971e-11
-  header:Tini: -5.328314900789638e-12
-  norm_emit_x: 5.8899291e-06
-  simulation_code: Impact
-  simulation_end: '4.200162071933716'
-  simulation_start: '0.0'
-  stop_1:s: 4.2
-- CQ10121:b1_gradient: 0.02615656253054357
-  GUNF:rf_field_scale: 59199549.15785489
-  GUNF:theta0_deg: -72.88555131263877
-  ID: 2aea9abcebbfcb37e45bb8cd1c3c797e
-  L0AF_body_1:rf_field_scale: 32938598.97332247
-  L0AF_body_1:theta0_deg: 331.68644602905925
-  L0AF_body_2:rf_field_scale: 32938598.97332247
-  L0AF_body_2:theta0_deg: 391.68644602905925
-  L0AF_entrance:rf_field_scale: 28515585.822135366
-  L0AF_entrance:theta0_deg: 301.68644602905925
-  L0AF_exit:rf_field_scale: 28515585.822135366
-  L0AF_exit:theta0_deg: 301.68644602905925
-  SOL10111:solenoid_field_scale: 0.31773029241910705
-  SQ10122:b1_gradient: -0.07495236956386314
-  header:Bcurr: 3.003084
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
-  header:Temission: 1.0646278341957971e-11
-  header:Tini: -5.328314900789638e-12
-  norm_emit_x: 5.8934388e-06
-  simulation_code: Impact
-  simulation_end: '4.200114394958048'
-  simulation_start: '0.0'
-  stop_1:s: 4.2
-- CQ10121:b1_gradient: 0.02615656253054357
-  GUNF:rf_field_scale: 59079939.473998465
-  GUNF:theta0_deg: -72.9851995699922
-  ID: fd52b01c878ef9a6eed19271fb4dc146
-  L0AF_body_1:rf_field_scale: 32938598.97332247
-  L0AF_body_1:theta0_deg: 331.7327783188353
-  L0AF_body_2:rf_field_scale: 32938598.97332247
-  L0AF_body_2:theta0_deg: 391.7327783188353
-  L0AF_entrance:rf_field_scale: 28515585.822135366
-  L0AF_entrance:theta0_deg: 301.7327783188353
-  L0AF_exit:rf_field_scale: 28515585.822135366
-  L0AF_exit:theta0_deg: 301.7327783188353
-  SOL10111:solenoid_field_scale: 0.31773029241910705
-  SQ10122:b1_gradient: -0.07495236956386314
-  header:Bcurr: 2.9436792000000005
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
-  header:Temission: 1.0646278341957971e-11
-  header:Tini: -5.328314900789638e-12
-  norm_emit_x: 6.2830278e-06
-  simulation_code: Impact
-  simulation_end: '4.200082437856493'
   simulation_start: '0.0'
   stop_1:s: 4.2
 - CQ10121:b1_gradient: 0.02615656253054357
@@ -188,6 +53,60 @@
   simulation_start: '0.0'
   stop_1:s: 4.2
 - CQ10121:b1_gradient: 0.02615656253054357
+  GUNF:rf_field_scale: 59199549.15785489
+  GUNF:theta0_deg: -72.88555131263877
+  ID: 2aea9abcebbfcb37e45bb8cd1c3c797e
+  L0AF_body_1:rf_field_scale: 32938598.97332247
+  L0AF_body_1:theta0_deg: 331.68644602905925
+  L0AF_body_2:rf_field_scale: 32938598.97332247
+  L0AF_body_2:theta0_deg: 391.68644602905925
+  L0AF_entrance:rf_field_scale: 28515585.822135366
+  L0AF_entrance:theta0_deg: 301.68644602905925
+  L0AF_exit:rf_field_scale: 28515585.822135366
+  L0AF_exit:theta0_deg: 301.68644602905925
+  SOL10111:solenoid_field_scale: 0.31773029241910705
+  SQ10122:b1_gradient: -0.07495236956386314
+  header:Bcurr: 3.003084
+  header:Flagdiag: 3
+  header:Np: 20000
+  header:Nx: 16
+  header:Ny: 16
+  header:Nz: 16
+  header:Temission: 1.0646278341957971e-11
+  header:Tini: -5.328314900789638e-12
+  norm_emit_x: 5.8934388e-06
+  simulation_code: Impact
+  simulation_end: '4.200114394958048'
+  simulation_start: '0.0'
+  stop_1:s: 4.2
+- CQ10121:b1_gradient: 0.02615656253054357
+  GUNF:rf_field_scale: 59325542.2705497
+  GUNF:theta0_deg: -73.65284289426025
+  ID: 11157e22ca6ec92d5c6599b60912419e
+  L0AF_body_1:rf_field_scale: 32938598.97332247
+  L0AF_body_1:theta0_deg: 331.7049789449697
+  L0AF_body_2:rf_field_scale: 32938598.97332247
+  L0AF_body_2:theta0_deg: 391.7049789449697
+  L0AF_entrance:rf_field_scale: 28515585.822135366
+  L0AF_entrance:theta0_deg: 301.7049789449697
+  L0AF_exit:rf_field_scale: 28515585.822135366
+  L0AF_exit:theta0_deg: 301.7049789449697
+  SOL10111:solenoid_field_scale: 0.31670748651076364
+  SQ10122:b1_gradient: -0.07495236956386314
+  header:Bcurr: 2.93179824
+  header:Flagdiag: 3
+  header:Np: 20000
+  header:Nx: 16
+  header:Ny: 16
+  header:Nz: 16
+  header:Temission: 1.0646278341957971e-11
+  header:Tini: -5.328314900789638e-12
+  norm_emit_x: 5.8899291e-06
+  simulation_code: Impact
+  simulation_end: '4.200162071933716'
+  simulation_start: '0.0'
+  stop_1:s: 4.2
+- CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 59336736.334687494
   GUNF:theta0_deg: -73.1645664332284
   ID: 02e6732603a6326608d635c6bed319f0
@@ -212,6 +131,33 @@
   norm_emit_x: 6.7735719e-06
   simulation_code: Impact
   simulation_end: '4.200112556571929'
+  simulation_start: '0.0'
+  stop_1:s: 4.2
+- CQ10121:b1_gradient: 0.02615656253054357
+  GUNF:rf_field_scale: 59212689.49819795
+  GUNF:theta0_deg: -73.00512922146288
+  ID: 62bfcbe5d67dccf2b5a7cd1320047607
+  L0AF_body_1:rf_field_scale: 32938598.97332247
+  L0AF_body_1:theta0_deg: 331.61231436541766
+  L0AF_body_2:rf_field_scale: 32938598.97332247
+  L0AF_body_2:theta0_deg: 391.61231436541766
+  L0AF_entrance:rf_field_scale: 28515585.822135366
+  L0AF_entrance:theta0_deg: 301.61231436541766
+  L0AF_exit:rf_field_scale: 28515585.822135366
+  L0AF_exit:theta0_deg: 301.61231436541766
+  SOL10111:solenoid_field_scale: 0.31773029241910705
+  SQ10122:b1_gradient: -0.07495236956386314
+  header:Bcurr: 2.880276
+  header:Flagdiag: 3
+  header:Np: 20000
+  header:Nx: 16
+  header:Ny: 16
+  header:Nz: 16
+  header:Temission: 1.0646278341957971e-11
+  header:Tini: -5.328314900789638e-12
+  norm_emit_x: 6.2245166e-06
+  simulation_code: Impact
+  simulation_end: '4.200102417403867'
   simulation_start: '0.0'
   stop_1:s: 4.2
 - CQ10121:b1_gradient: 0.02615656253054357
@@ -241,6 +187,33 @@
   simulation_end: '4.200060060605383'
   simulation_start: '0.0'
   stop_1:s: 4.2
+- CQ10121:b1_gradient: 0.02615656253054357
+  GUNF:rf_field_scale: 58590873.594338775
+  GUNF:theta0_deg: -71.48051088395528
+  ID: eecd64266c9996788873c26884836ef9
+  L0AF_body_1:rf_field_scale: 32938598.97332247
+  L0AF_body_1:theta0_deg: 331.74204477679046
+  L0AF_body_2:rf_field_scale: 32938598.97332247
+  L0AF_body_2:theta0_deg: 391.74204477679046
+  L0AF_entrance:rf_field_scale: 28515585.822135366
+  L0AF_entrance:theta0_deg: 301.74204477679046
+  L0AF_exit:rf_field_scale: 28515585.822135366
+  L0AF_exit:theta0_deg: 301.74204477679046
+  SOL10111:solenoid_field_scale: 0.31813941478244445
+  SQ10122:b1_gradient: -0.07495236956386314
+  header:Bcurr: 2.9516188800000003
+  header:Flagdiag: 3
+  header:Np: 20000
+  header:Nx: 16
+  header:Ny: 16
+  header:Nz: 16
+  header:Temission: 1.0646278341957971e-11
+  header:Tini: -5.328314900789638e-12
+  norm_emit_x: 6.1247201e-06
+  simulation_code: Impact
+  simulation_end: '4.200085335255858'
+  simulation_start: '0.0'
+  stop_1:s: 4.2
 - CQ10121:b1_gradient: 0.024517506522024037
   GUNF:rf_field_scale: 58663887.223632544
   GUNF:theta0_deg: -71.54029983836735
@@ -266,5 +239,32 @@
   norm_emit_x: 5.9459786e-06
   simulation_code: Impact
   simulation_end: '4.200099173954992'
+  simulation_start: '0.0'
+  stop_1:s: 4.2
+- CQ10121:b1_gradient: 0.02615656253054357
+  GUNF:rf_field_scale: 59079939.473998465
+  GUNF:theta0_deg: -72.9851995699922
+  ID: fd52b01c878ef9a6eed19271fb4dc146
+  L0AF_body_1:rf_field_scale: 32938598.97332247
+  L0AF_body_1:theta0_deg: 331.7327783188353
+  L0AF_body_2:rf_field_scale: 32938598.97332247
+  L0AF_body_2:theta0_deg: 391.7327783188353
+  L0AF_entrance:rf_field_scale: 28515585.822135366
+  L0AF_entrance:theta0_deg: 301.7327783188353
+  L0AF_exit:rf_field_scale: 28515585.822135366
+  L0AF_exit:theta0_deg: 301.7327783188353
+  SOL10111:solenoid_field_scale: 0.31773029241910705
+  SQ10122:b1_gradient: -0.07495236956386314
+  header:Bcurr: 2.9436792000000005
+  header:Flagdiag: 3
+  header:Np: 20000
+  header:Nx: 16
+  header:Ny: 16
+  header:Nz: 16
+  header:Temission: 1.0646278341957971e-11
+  header:Tini: -5.328314900789638e-12
+  norm_emit_x: 6.2830278e-06
+  simulation_code: Impact
+  simulation_end: '4.200082437856493'
   simulation_start: '0.0'
   stop_1:s: 4.2

@@ -1,7 +1,7 @@
 import numpy as np
 from Data_Standard_2 import DataPoint2   
 
-fileloc = '/sdf/data/ad/ard-online/Measurements/FACET-II/Injector/Processed_Data/From_NERSC/2024-01-27/'
+fileloc = './Ex_Experimental_Data2/'  # Location of data files
 import pandas as pd
 import os
 import yaml
@@ -122,7 +122,7 @@ metadata = {'source':'FACET-II Injector','date':'2024-01-27','notes':'Processed 
 
 summary_table = []
 # Loop over first 10 shots in the dataset
-for i in range(10):
+for i in range(len(all_data)):
     VCC = VCC_all[i,:,:]  # VCC image for shot i
     D = DataPoint2()      # Create new data point object
     scalar_inputs = {}
