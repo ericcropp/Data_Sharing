@@ -16,3 +16,5 @@ The results of the real data example are shown in **Test_Data2/**
 The results of the simulated data example are shown in **Test_Sim_Data2/**
 
 The standard data classes are found in Data_Standard_2.py
+
+The data used for making experimental and simulation examples are in **Ex_Experimental_Data2/** and **Ex_Simulation_Data2/**, respectively

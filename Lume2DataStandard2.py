@@ -35,8 +35,7 @@ import datetime
 from pmd_beamphysics import ParticleGroup
 
 # Load the list of simulation archive filenames from YAML
-with open('Impact_Filenames.yaml', 'r') as f:
-    impact_filenames = yaml.safe_load(f)
+impact_filenames = {'impact_archive': [os.path.join('Ex_Simulation_Data2', fname) for fname in os.listdir('Ex_Simulation_Data2') if fname.endswith('.h5')]}
 
 summary_table = []
 # Loop over all simulation archives listed in Impact_Filenames.yaml
@@ -47,7 +46,7 @@ for i in range(len(impact_filenames['impact_archive'])):
     I.load_archive(impact_filenames['impact_archive'][i])
 
     # Load template YAML for comparison
-    I_orig = impact.Impact.from_yaml('ImpactT.yaml')
+    I_orig = impact.Impact.from_yaml('Lattice_Files/ImpactT.yaml')
 
     # Compare lattice elements to original lattice -- we will save original lattice, so only need to store changes.
     lattice_I_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I.input['lattice'])}
@@ -141,12 +140,12 @@ for i in range(len(impact_filenames['impact_archive'])):
     run_info.update(I.output.get('run_info', {}))
 
     # Write Impact input file and reload to save to object
-    I.write_input(input_filename='Temp.in',path='.')
-    with open('Temp.in', 'r') as f_input:
+    I.write_input(input_filename='Temp.in',path='Lattice_Files/')
+    with open('Lattice_Files/Temp.in', 'r') as f_input:
         input_contents = f_input.read()
 
     # Read lattice and template files
-    with open('rfdata4', 'r') as f4, open('rfdata5', 'r') as f5, open('rfdata6', 'r') as f6, open('rfdata7', 'r') as f7, open('rfdata201', 'r') as f201, open('rfdata102', 'r') as f102, open('ImpactT.yaml', 'r') as f_yaml, open('ImpactT_template.in', 'r') as f_template:
+    with open('Lattice_Files/rfdata4', 'r') as f4, open('Lattice_Files/rfdata5', 'r') as f5, open('Lattice_Files/rfdata6', 'r') as f6, open('Lattice_Files/rfdata7', 'r') as f7, open('Lattice_Files/rfdata201', 'r') as f201, open('Lattice_Files/rfdata102', 'r') as f102, open('Lattice_Files/ImpactT.yaml', 'r') as f_yaml, open('Lattice_Files/ImpactT_template.in', 'r') as f_template:
         rfdata4_contents = f4.read()
         rfdata5_contents = f5.read()
         rfdata6_contents = f6.read()
