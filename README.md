@@ -1,8 +1,8 @@
-# Data_Standard
+# Data_Sharing
 Standardized format for storing simulation and measured data
 
 ## Overview
-The **Data_Standard** project provides a unified format for storing both simulation and measured data. This standard aims to facilitate data sharing and interoperability across different tools, workflows, and institutions. Includes:
+The **Data_Sharing** project provides a unified format for storing both simulation and measured data. This standard aims to facilitate data sharing and interoperability across different tools, workflows, and institutions. Includes:
 - Consistent data organization
 - Support for multiple data types (e.g., ParticleGroups, scalars, images, metadata) and simulations AND experimental data
 - Extensible format for future requirements
