@@ -1,6 +1,9 @@
 """
 Module: Data_Standard_2
-This module provides classes and utilities for representing, validating, and saving standardized data points for accelerator physics simulations and experiments. It supports scalar inputs, input distributions (images or ParticleGroup), lattice information, outputs, summaries, run information, and simulation metadata. Data can be serialized to HDF5 format.
+This module provides classes and utilities for representing, validating, and saving standardized data points for accelerator physics simulations and experiments. 
+It supports scalar inputs, input distributions (images or ParticleGroup), lattice information, outputs, summaries, run information, and simulation metadata. 
+Data can be serialized to HDF5 format.
+
 Classes:
 --------
 SingleInput:
