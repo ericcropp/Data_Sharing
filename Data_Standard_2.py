@@ -879,6 +879,12 @@ class DataPoint2:
                 for k, v in output.attrs.items():
                     out_grp.attrs[k] = v
                 # Save datum
+
+            if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
+                # sim_meta_grp = f.create_group("simulation_metadata")
+                # Save simulation_input_file as a dataset within the group
+                lattice_grp.create_dataset("simulation_input_file", data=np.bytes_(self.simulation_metadata.simulation_input_file))
+                
                 
 
 
