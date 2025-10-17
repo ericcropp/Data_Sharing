@@ -1,7 +1,7 @@
 - CQ10121:b1_gradient: 0.024517506522024037
   GUNF:rf_field_scale: 58602981.27742918
   GUNF:theta0_deg: -71.64991292145612
-  ID: 83dc151501a558ac33ed6520360006d4
+  ID: bd03c4d3ece5cb9d71f5a83b76b1f5b4
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.74204477679046
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -13,11 +13,11 @@
   SOL10111:solenoid_field_scale: 0.31629836414742624
   SQ10122:b1_gradient: -0.0747584826213285
   header:Bcurr: 2.98726176
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 5.9995838e-06
@@ -28,7 +28,7 @@
 - CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 59124066.97181453
   GUNF:theta0_deg: -73.02505887293358
-  ID: 3f45224629055de27296d6af98221f4a
+  ID: 00e50d809f2f74932b93928626fe14ed
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.64011373928327
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -40,11 +40,11 @@
   SOL10111:solenoid_field_scale: 0.31773029241910705
   SQ10122:b1_gradient: -0.07495236956386314
   header:Bcurr: 2.9436792000000005
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 6.0026009e-06
@@ -55,7 +55,7 @@
 - CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 59199549.15785489
   GUNF:theta0_deg: -72.88555131263877
-  ID: 2aea9abcebbfcb37e45bb8cd1c3c797e
+  ID: 7a7753a297c643f5d8f9c4e3333030ea
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.68644602905925
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -67,11 +67,11 @@
   SOL10111:solenoid_field_scale: 0.31773029241910705
   SQ10122:b1_gradient: -0.07495236956386314
   header:Bcurr: 3.003084
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 5.8934388e-06
@@ -82,7 +82,7 @@
 - CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 59325542.2705497
   GUNF:theta0_deg: -73.65284289426025
-  ID: 11157e22ca6ec92d5c6599b60912419e
+  ID: fd4c8a45ee4d6d897d0c3d879ac3e44a
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.7049789449697
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -94,11 +94,11 @@
   SOL10111:solenoid_field_scale: 0.31670748651076364
   SQ10122:b1_gradient: -0.07495236956386314
   header:Bcurr: 2.93179824
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 5.8899291e-06
@@ -109,7 +109,7 @@
 - CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 59336736.334687494
   GUNF:theta0_deg: -73.1645664332284
-  ID: 02e6732603a6326608d635c6bed319f0
+  ID: fd904383ca0aae16fe1746474a64dbde
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.65864665519365
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -121,11 +121,11 @@
   SOL10111:solenoid_field_scale: 0.3245489984747299
   SQ10122:b1_gradient: -0.07495236956386314
   header:Bcurr: 2.8644252000000003
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 6.7735719e-06
@@ -136,7 +136,7 @@
 - CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 59212689.49819795
   GUNF:theta0_deg: -73.00512922146288
-  ID: 62bfcbe5d67dccf2b5a7cd1320047607
+  ID: d11e8496b8f8230695907a67361db7a9
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.61231436541766
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -148,11 +148,11 @@
   SOL10111:solenoid_field_scale: 0.31773029241910705
   SQ10122:b1_gradient: -0.07495236956386314
   header:Bcurr: 2.880276
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 6.2245166e-06
@@ -163,7 +163,7 @@
 - CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 59190273.098326124
   GUNF:theta0_deg: -73.38379259940596
-  ID: 4dbc87e26d8022596e87f9af06ed61ee
+  ID: 9477c17359ded779981949d25a1e5453
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.7605776927009
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -175,11 +175,11 @@
   SOL10111:solenoid_field_scale: 0.31773029241910705
   SQ10122:b1_gradient: -0.07495236956386314
   header:Bcurr: 2.721825119999999
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 6.3600124e-06
@@ -190,7 +190,7 @@
 - CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 58590873.594338775
   GUNF:theta0_deg: -71.48051088395528
-  ID: eecd64266c9996788873c26884836ef9
+  ID: 970182a199286998fad006328aa77d9e
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.74204477679046
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -202,11 +202,11 @@
   SOL10111:solenoid_field_scale: 0.31813941478244445
   SQ10122:b1_gradient: -0.07495236956386314
   header:Bcurr: 2.9516188800000003
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 6.1247201e-06
@@ -217,7 +217,7 @@
 - CQ10121:b1_gradient: 0.024517506522024037
   GUNF:rf_field_scale: 58663887.223632544
   GUNF:theta0_deg: -71.54029983836735
-  ID: c9e6db4177f660ab891f83b976a321e3
+  ID: 0f1b64f356e94b2a2cecfe434cbf8ee8
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.7327783188353
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -229,11 +229,11 @@
   SOL10111:solenoid_field_scale: 0.31629836414742624
   SQ10122:b1_gradient: -0.0747584826213285
   header:Bcurr: 2.8683950400000002
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 5.9459786e-06
@@ -244,7 +244,7 @@
 - CQ10121:b1_gradient: 0.02615656253054357
   GUNF:rf_field_scale: 59079939.473998465
   GUNF:theta0_deg: -72.9851995699922
-  ID: fd52b01c878ef9a6eed19271fb4dc146
+  ID: 864f294d336bd8c1542018da675f2380
   L0AF_body_1:rf_field_scale: 32938598.97332247
   L0AF_body_1:theta0_deg: 331.7327783188353
   L0AF_body_2:rf_field_scale: 32938598.97332247
@@ -256,11 +256,11 @@
   SOL10111:solenoid_field_scale: 0.31773029241910705
   SQ10122:b1_gradient: -0.07495236956386314
   header:Bcurr: 2.9436792000000005
-  header:Flagdiag: 3
-  header:Np: 20000
-  header:Nx: 16
-  header:Ny: 16
-  header:Nz: 16
+  header:Flagdiag: 3.0
+  header:Np: 20000.0
+  header:Nx: 16.0
+  header:Ny: 16.0
+  header:Nz: 16.0
   header:Temission: 1.0646278341957971e-11
   header:Tini: -5.328314900789638e-12
   norm_emit_x: 6.2830278e-06

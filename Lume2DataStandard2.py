@@ -38,6 +38,34 @@ from pmd_beamphysics import ParticleGroup
 impact_filenames = {'impact_archive': [os.path.join('Ex_Simulation_Data2', fname) for fname in os.listdir('Ex_Simulation_Data2') if fname.endswith('.h5')]}
 
 summary_table = []
+
+unit_list = {'b1_gradient': 'T/m','theta0_deg': 'unitless','rf_field_scale': 'V/m','solenoid_field_scale': 'T'}
+output_unit_list = {
+    'cov_x__px': 'm',
+    'cov_y__py': 'm',
+    'cov_z__pz': 'm',
+    'loadbalance_max_n_particle': 'unitless',
+    'loadbalance_min_n_particle': 'unitless',
+    'max_amplitude_x': 'm',
+    'max_amplitude_y': 'm',
+    'max_amplitude_z': 'm',
+    'max_r': 'm',
+    'mean_beta': 'unitless',
+    'mean_gamma': 'unitless',
+    'mean_kinetic_energy': 'eV',
+    'mean_x': 'm',
+    'mean_y': 'm',
+    'mean_z': 'm',
+    'n_particle': 'unitless',
+    'norm_emit_x': 'm',
+    'norm_emit_y': 'm',
+    'norm_emit_z': 'm',
+    'sigma_gamma': 'unitless',
+    'sigma_x': 'm',
+    'sigma_y': 'm',
+    'sigma_z': 'm',
+    't': 's'
+}
 # Loop over all simulation archives listed in Impact_Filenames.yaml
 for i in range(len(impact_filenames['impact_archive'])):
 
@@ -163,11 +191,19 @@ for i in range(len(impact_filenames['impact_archive'])):
     # Add scalar inputs to the data point
     scalar_inputs = {}
     for col in data_dict:
+        # Determine units based on suffix match with unit_list keys
+        units = ""
+        for key, val in unit_list.items():
+            if col.endswith(key):
+                units = val
+                break
+        if not units:  # If still None or blank, set default
+            units = "unitless"
         scalar_inputs[col] = {
             "name": col,
             "value": data_dict[col],
             "location": col,
-            "units": "",        # Fill in units if available
+            "units": units,
             "description": ""   # Fill in description if available
         }
     D.add_inputs(scalar_inputs=scalar_inputs)
@@ -205,7 +241,10 @@ for i in range(len(impact_filenames['impact_archive'])):
     # Add scalar outputs from stats
     for key, value in I.output['stats'].items():
         if key != 'mean_z':
-            D.add_output(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, datum_name=key, datum_type='scalar')
+            if key in output_unit_list:
+                D.add_output(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, units=output_unit_list[key], datum_name=key, datum_type='scalar')
+            else:
+                D.add_output(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, units='unitless', datum_name=key, datum_type='scalar')
     # Add distribution outputs from particles
     for key, value in I.output['particles'].items():
         if key != 'final_particles' and key != 'initial_particles':
