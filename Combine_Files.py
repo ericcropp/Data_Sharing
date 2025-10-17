@@ -1,3 +1,17 @@
+"""
+Combine_Files.py
+
+This script combines multiple HDF5 files (each representing a single data point) into a single HDF5 file for easier sharing and analysis. 
+It reads a summary YAML file (summary_table.yaml) that lists the IDs of the files to combine, loads each corresponding HDF5 file, and copies its contents into a group within the output file named by its ID. 
+The script also moves the first lattice group to the root and removes duplicate lattice groups, and stores the summary table as attributes in a top-level group ("summary_yaml") in the combined file.
+
+Usage:
+    python Combine_Files.py <input_dir> <output_h5>
+    - <input_dir>: Directory containing summary_table.yaml and the individual HDF5 files.
+    - <output_h5>: Path to the combined output HDF5 file.
+
+"""
+
 import os
 import yaml
 import h5py

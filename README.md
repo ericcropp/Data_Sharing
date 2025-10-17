@@ -18,3 +18,7 @@ The results of the simulated data example are shown in **Test_Sim_Data2/**
 The standard data classes are found in **Data_Standard_2.py**
 
 The data used for making experimental and simulation examples are in **Ex_Experimental_Data2/** and **Ex_Simulation_Data2/**, respectively
+
+For making batch-level HDF5 files, use **Combine_Files.py** with first command line argument as the input directory, and the second the output directory
+
+The beginnings of a more formal standard are seen in **Definitions.md**
