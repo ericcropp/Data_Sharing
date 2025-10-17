@@ -114,11 +114,40 @@ numpy, pandas, pmd_beamphysics.ParticleGroup, hashlib, json, h5py, os
 """
 import numpy as np
 import pandas as pd
-from pmd_beamphysics import ParticleGroup
+from pmd_beamphysics import ParticleGroup, units
 import hashlib
 import json
 import h5py
 import os
+
+def unit_checker(unit):
+    """
+    Checks if the provided unit is valid.
+    Args:
+        unit (str): Unit string to check.
+
+    Returns:
+        openpmd_beamphysics.units: Valid unit if recognized, else "Custom_Unit".
+    """
+    valid_unit = "Custom Unit"
+    prefix = 1
+    if not isinstance(unit, str):
+        raise ValueError("unit must be a string, received type: {}".format(type(unit)))
+    if unit in units.known_unit.keys():
+        valid_unit = units.known_unit[unit]
+        prefix = 1
+    else:
+        # Check for prefix in units.PREFIX_FACTOR or units.SHORT_PREFIX_FACTOR
+        for pro in list(units.PREFIX_FACTOR.keys()) + list(units.SHORT_PREFIX_FACTOR.keys()):
+            if unit.startswith(pro):
+                base_unit = unit[len(pro):]
+                if base_unit in units.known_unit:
+                    valid_unit = units.known_unit[base_unit]
+                    prefix = units.PREFIX_FACTOR.get(pro, units.SHORT_PREFIX_FACTOR.get(pro, 1))
+
+
+    return prefix, valid_unit
+
 
 """
 Represents a single scalar input parameter for the data standard.
@@ -134,10 +163,16 @@ class SingleInput:
             units (str): Units of the input value.
             description (str): Description of the input.
         """
+        if name == "" or value is None or units == "" or location == "":
+            raise ValueError("name, value, units, and location must not be blank")
         self.name = name
         self.location = location
-        self.value = value
-        self.units = units
+        prefix, valid_units = unit_checker(units)
+        try:
+            self.value = float(value) * prefix
+        except Exception:
+            self.value = np.nan
+        self.units = units if valid_units == "Custom Unit" else valid_units
         self.description = description
 
     def to_dict(self):
@@ -146,11 +181,16 @@ class SingleInput:
         Returns:
             dict: Dictionary with input attributes.
         """
+        # Ensure units is always a string for JSON serialization
+        if isinstance(self.units, str):
+            units_str = self.units
+        else:
+            units_str = getattr(self.units, "unitSymbol", str(self.units))
         return {
             "name": self.name,
             "value": self.value,
             "location": self.location,
-            "units": self.units,
+            "units": units_str,
             "description": self.description
         }
 
@@ -159,7 +199,7 @@ class SingleInput:
 Represents a single output datum for the data standard.
 """
 class SingleOutput:
-    def __init__(self, location="", datum=None, attrs=None, datum_name="", datum_type=None):
+    def __init__(self, location="", datum=None, attrs=None, datum_name="", datum_type=None, units=None):
         """
         Initialize a SingleOutput instance.
         Args:
@@ -184,6 +224,16 @@ class SingleOutput:
         if datum_type is not None and datum_type not in allowed_types:
             raise ValueError(f"datum_type must be one of {allowed_types}")
         self.datum_type = datum_type  # 'scalar' or 'image' or 'distribution'
+        if self.datum_type == 'scalar':
+            assert units is not None, "units must be provided for scalar datum_type"
+        if isinstance(self.datum,list):
+            self.datum = np.array(self.datum)
+        prefix, valid_units = unit_checker(units)
+        if isinstance(prefix, (int, float)):
+            if self.datum_type == 'scalar':
+                self.datum = self.datum * prefix
+            
+        self.units = units if valid_units == "Custom Unit" else valid_units
         if isinstance(self.location, list):
             assert isinstance(self.datum, (list, np.ndarray)), "If location is a list, datum must be a list or np.ndarray."
             assert len(self.location) == len(self.datum), "location and datum lists must have the same length."
@@ -478,9 +528,9 @@ class Outputs(list):
         self = []
         for output in output_list:
 
-            self.add_output(output["location"], output["datum"], output.get("attrs"), output.get("datum_name", ""), output.get("datum_type", None))
-    
-    def add_output(self, location, datum, attrs=None, datum_name="", datum_type=None):
+            self.add_output(output["location"], output["datum"], output["units"], output.get("attrs"), output.get("datum_name", ""), output.get("datum_type", None))
+
+    def add_output(self, location, datum, units='', attrs=None, datum_name="", datum_type=None):
         """
         Adds an output to the Outputs list.
         Args:
@@ -497,7 +547,8 @@ class Outputs(list):
             datum=datum,
             attrs=attrs,
             datum_name=datum_name,
-            datum_type=datum_type
+            datum_type=datum_type,
+            units=units
         )
         self.append(output)
         self.output_checker(allow_blank=True)
@@ -722,8 +773,8 @@ class DataPoint2:
         """
         self.run_information.add_run_information(source, date, notes)
         return self
-    
-    def add_output(self, location, datum, attrs=None, datum_name="", datum_type=None):
+
+    def add_output(self, location, datum, units='', attrs=None, datum_name="", datum_type=None):
         """
         Adds an output to the data point.
         Args:
@@ -735,7 +786,7 @@ class DataPoint2:
         Returns:
             self: The DataPoint2 instance.
         """
-        self.outputs.add_output(location, datum, attrs, datum_name, datum_type)
+        self.outputs.add_output(location, datum, units, attrs, datum_name, datum_type)
         if datum_type == 'scalar':
             self.scalar_output_list.append(datum_name)
         return self
@@ -845,7 +896,10 @@ class DataPoint2:
                 input_grp = inputs_grp.create_dataset(name,data=single_input.value)
                 input_grp.attrs["name"] = single_input.name
                 input_grp.attrs["location"] = single_input.location
-                input_grp.attrs["units"] = single_input.units
+                if isinstance(single_input.units, str):
+                    input_grp.attrs["units"] = single_input.units
+                else:
+                    input_grp.attrs["units"] = getattr(single_input.units, "unitSymbol", str(single_input.units))
                 input_grp.attrs["description"] = single_input.description
             # Input distribution
             if isinstance(self.inputs.input_distribution, np.ndarray):
@@ -879,6 +933,12 @@ class DataPoint2:
                 # out_grp = outputs_grp.create_group(output.datum_name)
                 out_grp.attrs["location"] = output.location
                 out_grp.attrs["datum_type"] = output.datum_type
+
+                if isinstance(output.units, str):
+                    out_grp.attrs["units"] = output.units
+                else:
+                    out_grp.attrs["units"] = getattr(output.units, "unitSymbol", str(output.units))
+                    
                 for k, v in output.attrs.items():
                     out_grp.attrs[k] = v
                 # Save datum
