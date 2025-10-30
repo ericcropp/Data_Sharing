@@ -199,7 +199,7 @@ class SingleInput:
 Represents a single output datum for the data standard.
 """
 class SingleOutput:
-    def __init__(self, location="", datum=None, attrs=None, datum_name="", datum_type=None, units=None):
+    def __init__(self, location="", datum=None, attrs=None, datum_name="", datum_type=None, units=None, location_primary=True):
         """
         Initialize a SingleOutput instance.
         Args:
@@ -216,7 +216,7 @@ class SingleOutput:
         ):
             raise TypeError("location must be a string, number, or list")
         self.location = location
-
+        self.location_primary = location_primary
         self.datum = datum
         self.attrs = attrs if attrs is not None else {}
         self.datum_name = datum_name
@@ -264,7 +264,7 @@ class SingleOutput:
                 for d in self.datum:
                     assert isinstance(d, (int, float, np.integer, np.floating)), "Each item in datum must be a scalar (int or float) for scalar data."
             else:
-                assert isinstance(self.datum, (int, float, np.integer, np.floating)), "datum must be a scalar (int or float) for scalar data."
+                assert isinstance(self.datum, (int, float, np.integer, np.floating)), f"datum must be a scalar (int or float) for scalar data. Got type: {type(self.datum)}"
         
 
 def input_distribution_checker(input_distribution, input_distribution_attrs):
@@ -528,9 +528,9 @@ class Outputs(list):
         # self = []
         for output in output_list:
 
-            self.add_output(output["location"], output["datum"], output["units"], output.get("attrs"), output.get("datum_name", ""), output.get("datum_type", None))
+            self.add_output(output["location"], output["datum"], output["units"], output.get("attrs"), output.get("datum_name", ""), output.get("datum_type", None),output.get("location_primary", True))
 
-    def add_output(self, location, datum, units='', attrs=None, datum_name="", datum_type=None):
+    def add_output(self, location, datum, units='', attrs=None, datum_name="", datum_type=None, location_primary=True):
         """
         Adds an output to the Outputs list.
         Args:
@@ -542,16 +542,35 @@ class Outputs(list):
         """
         assert location is not None, "Output 'location' must not be None"
         assert datum is not None, "Output 'datum' must not be None"
-        output = SingleOutput(
+        assert len(datum) == len(location) if isinstance(location, list) else True, "If location is a list, datum must have the same length as location."
+        if location_primary not in [True, False]:
+            raise ValueError("location_primary must be a boolean value")
+        if location_primary and (isinstance(location, list) or isinstance(location, np.ndarray)) and len(location) > 1:
+            for i, loc in enumerate(location):
+                output = SingleOutput(
+                    location=loc,
+                    datum=datum[i],
+                    attrs=attrs,
+                    datum_name=datum_name,
+                    datum_type=datum_type,
+                    units=units,
+                    location_primary=location_primary
+                )
+                self.append(output)
+                self.output_checker(allow_blank=True)
+            
+        else:
+            output = SingleOutput(
             location=location,
             datum=datum,
             attrs=attrs,
             datum_name=datum_name,
             datum_type=datum_type,
-            units=units
-        )
-        self.append(output)
-        self.output_checker(allow_blank=True)
+            units=units,
+            location_primary=location_primary
+            )
+            self.append(output)
+            self.output_checker(allow_blank=True)
 
     def output_checker(self,allow_blank = False):
         """
@@ -774,7 +793,7 @@ class DataPoint2:
         self.run_information.add_run_information(source, date, notes)
         return self
 
-    def add_output(self, location, datum, units='', attrs=None, datum_name="", datum_type=None):
+    def add_output(self, location, datum, units='', attrs=None, datum_name="", datum_type=None, location_primary=True):
         """
         Adds an output to the data point.
         Args:
@@ -786,7 +805,7 @@ class DataPoint2:
         Returns:
             self: The DataPoint2 instance.
         """
-        self.outputs.add_output(location, datum, units, attrs, datum_name, datum_type)
+        self.outputs.add_output(location, datum, units, attrs, datum_name, datum_type, location_primary=location_primary)
         if datum_type == 'scalar':
             self.scalar_output_list.append(datum_name)
         return self
@@ -922,26 +941,67 @@ class DataPoint2:
             # Save outputs
             outputs_grp = f.create_group("observables")
             for i, output in enumerate(self.outputs):
-                if output.datum_type == "scalar":
-                    out_grp = outputs_grp.create_dataset(output.datum_name, data=output.datum)
-                elif output.datum_type == "image":
-                    out_grp = outputs_grp.create_dataset(output.datum_name, data=np.array(output.datum))
-                elif output.datum_type == "distribution":
-                    out_grp = outputs_grp.create_group(output.datum_name)
-                    if isinstance(output.datum, ParticleGroup):
-                        output.datum.write(out_grp)
-                # out_grp = outputs_grp.create_group(output.datum_name)
-                out_grp.attrs["location"] = output.location
-                out_grp.attrs["datum_type"] = output.datum_type
 
-                if isinstance(output.units, str):
-                    out_grp.attrs["units"] = output.units
+                if output.location_primary == False:
+                    # Create or get the "Type_Grouped_Data" group
+                    if "Type_Grouped_Data" not in outputs_grp:
+                        type_grouped_grp = outputs_grp.create_group("Type_Grouped_Data")
+                    else:
+                        type_grouped_grp = outputs_grp["Type_Grouped_Data"]
+
+                    if output.datum_type == "scalar":
+                        out_grp = type_grouped_grp.create_dataset(output.datum_name, data=output.datum)
+                    elif output.datum_type == "image":
+                        out_grp = type_grouped_grp.create_dataset(output.datum_name, data=np.array(output.datum))
+                    elif output.datum_type == "distribution":
+                        out_grp = type_grouped_grp.create_group(output.datum_name)
+                        if isinstance(output.datum, ParticleGroup):
+                            output.datum.write(out_grp)
+                    # out_grp = type_grouped_grp.create_group(output.datum_name)
+                    out_grp.attrs["location"] = output.location
+                    out_grp.attrs["datum_type"] = output.datum_type
+
+                    if isinstance(output.units, str):
+                        out_grp.attrs["units"] = output.units
+                    else:
+                        out_grp.attrs["units"] = getattr(output.units, "unitSymbol", str(output.units))
+
+                    for k, v in output.attrs.items():
+                        out_grp.attrs[k] = v
+                    # Save datum
                 else:
-                    out_grp.attrs["units"] = getattr(output.units, "unitSymbol", str(output.units))
-                    
-                for k, v in output.attrs.items():
-                    out_grp.attrs[k] = v
-                # Save datum
+                    # print(output.location)
+                    # Create or get the group for this output location
+                    if str(output.location) not in outputs_grp:
+                        out_grp = outputs_grp.create_group(str(output.location))
+                    else:
+                        out_grp = outputs_grp[str(output.location)]
+
+                    # Save datum based on type
+                    if output.datum_type == "scalar":
+                        # print(str(output.location) + "/" + output.datum_name)
+                        data_ds = out_grp.create_dataset(output.datum_name, data=output.datum)
+                    elif output.datum_type == "image":
+                        data_ds = out_grp.create_dataset(output.datum_name, data=np.array(output.datum))
+                    elif output.datum_type == "distribution":
+                        data_grp = out_grp.create_group(output.datum_name)
+                        if isinstance(output.datum, ParticleGroup):
+                            output.datum.write(data_grp)
+                        data_ds = data_grp
+                    else:
+                        data_ds = out_grp.create_dataset(output.datum_name, data=output.datum)
+
+                    # Set attributes
+                    data_ds.attrs["location"] = output.location
+                    data_ds.attrs["datum_type"] = output.datum_type
+                    if isinstance(output.units, str):
+                        data_ds.attrs["units"] = output.units
+                    else:
+                        data_ds.attrs["units"] = getattr(output.units, "unitSymbol", str(output.units))
+                    for k, v in output.attrs.items():
+                        data_ds.attrs[k] = v
+
+
 
             if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
                 # sim_meta_grp = f.create_group("simulation_metadata")
