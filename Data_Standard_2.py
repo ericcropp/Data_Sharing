@@ -83,7 +83,7 @@ DataPoint2:
         add_inputs(...): Adds inputs.
         add_lattice(...): Adds lattice info.
         add_run_information(...): Adds run info.
-        add_output(...): Adds output.
+        add_observable(...): Adds output.
         add_summary(...): Adds summary info.
         get_summary(): Extracts summary data.
         checker(): Validates all components.
@@ -793,7 +793,7 @@ class DataPoint2:
         self.run_information.add_run_information(source, date, notes)
         return self
 
-    def add_output(self, location, datum, units='', attrs=None, datum_name="", datum_type=None, location_primary=True):
+    def add_observable(self, location, datum, units='', attrs=None, datum_name="", datum_type=None, location_primary=True):
         """
         Adds an output to the data point.
         Args:

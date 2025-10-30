@@ -242,15 +242,15 @@ for i in range(len(impact_filenames['impact_archive'])):
     for key, value in I.output['stats'].items():
         if key != 'mean_z':
             if key in output_unit_list:
-                D.add_output(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, units=output_unit_list[key], datum_name=key, datum_type='scalar',location_primary=False)
+                D.add_observable(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, units=output_unit_list[key], datum_name=key, datum_type='scalar',location_primary=False)
             else:
-                D.add_output(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, units='unitless', datum_name=key, datum_type='scalar',location_primary=False)
+                D.add_observable(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, units='unitless', datum_name=key, datum_type='scalar',location_primary=False)
     # Add distribution outputs from particles
     for key, value in I.output['particles'].items():
         if key != 'final_particles' and key != 'initial_particles':
-            D.add_output(location=key, datum=value, attrs={}, datum_name=key, datum_type='distribution',location_primary=True)
+            D.add_observable(location=key, datum=value, attrs={}, datum_name=key, datum_type='distribution',location_primary=True)
     # Add final_particles as a distribution output
-    D.add_output(location=I.particles['final_particles']['mean_z'], datum=I.particles['final_particles'], attrs={}, datum_name='final_particles', datum_type='distribution',location_primary=False)
+    D.add_observable(location=I.particles['final_particles']['mean_z'], datum=I.particles['final_particles'], attrs={}, datum_name='final_particles', datum_type='distribution',location_primary=False)
     # Ensure output directory exists for HDF5 files
     os.makedirs('./Test_Sim_Data2/', exist_ok=True)
     # Save the data point to HDF5
