@@ -116,10 +116,10 @@ def main():
                 del out_f[grp_name + '/lattice']  # TO DO: Check that lattice is the same for all files
             i += 1
 
-        summary_grp = out_f.create_group("summary_yaml")
+        # summary_grp = out_f.create_group("summary_yaml")
         # Store the summary as a single attribute table on the summary_yaml group
         for key in summary[0].keys():
-            summary_grp.attrs[key] = [entry.get(key) for entry in summary]
+            out_f.attrs[key] = [entry.get(key) for entry in summary]
 
     print(f"Combined file written to {args.output_h5}")
 
