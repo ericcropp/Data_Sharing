@@ -203,10 +203,10 @@ for i in range(len(all_data)):
             for prefix in unit_prefixes
             ], dtype=float)
             # print(unit_prefixes)
-            D.add_output(location=unit_prefixes, datum=data, attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+            D.add_observable(location=unit_prefixes, datum=data, attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
 
     # Add image output (profile camera)
-    D.add_output(location='PROF:IN10:571', datum=all_images[i,:,:], attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
+    D.add_observable(location='PROF:IN10:571', datum=all_images[i,:,:], attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
 
     # Add summary info for this shot
     D.add_summary(summary_keys, summary_location='final')
