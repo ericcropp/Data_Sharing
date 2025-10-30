@@ -920,7 +920,7 @@ class DataPoint2:
                     lattice_files_grp.create_dataset(fname, data=np.bytes_(contents))
 
             # Save outputs
-            outputs_grp = f.create_group("outputs")
+            outputs_grp = f.create_group("observables")
             for i, output in enumerate(self.outputs):
                 if output.datum_type == "scalar":
                     out_grp = outputs_grp.create_dataset(output.datum_name, data=output.datum)
