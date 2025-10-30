@@ -525,7 +525,7 @@ class Outputs(list):
         super().__init__()
         output_list = output_list if output_list is not None else []
 
-        self = []
+        # self = []
         for output in output_list:
 
             self.add_output(output["location"], output["datum"], output["units"], output.get("attrs"), output.get("datum_name", ""), output.get("datum_type", None))
