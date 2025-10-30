@@ -135,12 +135,8 @@ scalar_output_cols = {'BPMS:IN10:221:X': 'mm',
  'BPMS:IN10:731:TMIT': 'nC',
  'BPMS:IN10:771:TMIT': 'nC',
  'BPMS:IN10:781:TMIT': 'nC',
- 'TORO:IN10:431:1:TMIT_P': 'pC',
- 'TORO:IN10:591:1:TMIT_P': 'pC',
  'TORO:IN10:591:TMIT_PC': 'pC',
- 'TORO:IN10:791:1:TMIT_P': 'pC',
  'TORO:IN10:791:TMIT_PC': 'pC',
- 'TORO:IN10:791:0:TMIT_PC': 'pC',
   'CAMR:LT10:900:XRMS': 'mm',
  'CAMR:LT10:900:YRMS': 'mm',
  'CAMR:LT10:900:X': 'mm',
@@ -187,7 +183,8 @@ for i in range(len(all_data)):
     for col in scalar_output_cols.keys():
         parts = col.split(':')
         suffix = parts[-1]
-        prefix = ':'.join(parts[:-1])
+        prefix = ':'.join(parts[:3])
+        # print(prefix,suffix)
         if suffix not in unique_suffix_dict:
             unique_suffix_dict[suffix] = []
         unique_suffix_dict[suffix].append(prefix)
@@ -205,10 +202,11 @@ for i in range(len(all_data)):
             else np.nan
             for prefix in unit_prefixes
             ], dtype=float)
-            D.add_output(location=unit_prefixes, datum=data, attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar')
+            # print(unit_prefixes)
+            D.add_output(location=unit_prefixes, datum=data, attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
 
     # Add image output (profile camera)
-    D.add_output(location='PROF:IN10:571', datum=all_images[i,:,:], attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image')
+    D.add_output(location='PROF:IN10:571', datum=all_images[i,:,:], attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
 
     # Add summary info for this shot
     D.add_summary(summary_keys, summary_location='final')
