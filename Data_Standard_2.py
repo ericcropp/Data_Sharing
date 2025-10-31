@@ -120,6 +120,8 @@ import json
 import h5py
 import os
 
+VERSION = '2025-10-30'
+
 def unit_checker(unit):
     """
     Checks if the provided unit is valid.
@@ -857,6 +859,7 @@ class DataPoint2:
             summary["simulation_start"] = self.simulation_metadata.simulation_start
             summary["simulation_end"] = self.simulation_metadata.simulation_end
             summary["simulation_code"] = self.simulation_metadata.simulation_code
+            summary["simulation_version"] = self.simulation_metadata.simulation_version
             # "simulation_input_file": self.simulation_metadata.simulation_input_file
         
 
@@ -1016,6 +1019,7 @@ class DataPoint2:
             f.attrs["run_information_source"] = self.run_information.source
             f.attrs["run_information_date"] = self.run_information.date
             f.attrs["run_information_notes"] = self.run_information.notes
+            f.attrs["Data_Standard_Version"] = VERSION
             for key in self.summary.summary_keys:
                 f.attrs[key] = getattr(self.summary, "summary", {}).get(key, "")
             f.attrs["summary_location"] = self.summary.summary_location
@@ -1024,7 +1028,7 @@ class DataPoint2:
 Stores simulation metadata for the data standard.
 """
 class SimulationMetadata:
-    def __init__(self, simulation_start="", simulation_end="", simulation_code="", simulation_input_file=""):
+    def __init__(self, simulation_start="", simulation_end="", simulation_code="", simulation_input_file="", simulation_version=""):
         """
         Initialize SimulationMetadata instance.
         Args:
@@ -1032,11 +1036,12 @@ class SimulationMetadata:
             simulation_end (str): Simulation end time.
             simulation_code (str): Simulation code name.
             simulation_input_file (str): Input file for simulation.
+            simulation_version (str): Version of the simulation code.
         """
-        self.add_simulation_data(simulation_start, simulation_end, simulation_code, simulation_input_file)
+        self.add_simulation_data(simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version)
         self.sim_data_checker(allow_blank=True)
 
-    def add_simulation_data(self, simulation_start, simulation_end, simulation_code, simulation_input_file):
+    def add_simulation_data(self, simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version):
         """
         Adds simulation metadata.
         Args:
@@ -1049,6 +1054,7 @@ class SimulationMetadata:
         self.simulation_end = str(simulation_end)
         self.simulation_code = str(simulation_code)
         self.simulation_input_file = str(simulation_input_file)
+        self.simulation_version = str(simulation_version)
         self.sim_data_checker(allow_blank=True)
 
     def sim_data_checker(self, allow_blank=False):
@@ -1077,6 +1083,10 @@ class SimulationMetadata:
             raise TypeError("simulation_input_file must be a string")
         if self.simulation_input_file=="":
             raise ValueError("simulation_input_file must not be empty")
+        if not isinstance(self.simulation_version, str):
+            raise TypeError("simulation_version must be a string")
+        if self.simulation_version=="":
+            raise ValueError("simulation_version must not be empty")
 
 class SimulatedDataPoint2(DataPoint2):
     
@@ -1084,7 +1094,7 @@ class SimulatedDataPoint2(DataPoint2):
     def __init__(self, scalar_inputs=None, input_distribution=None, lattice_location=None, lattice_files=None,
                  output_list=None, summary_keys=None, summary_location='final', ID="", run_information=None,
                  outputs=None, summary=None, input_distribution_attrs=None,
-                 simulation_start=None, simulation_end=None, simulation_code="", simulation_input_file=""):
+                 simulation_start=None, simulation_end=None, simulation_code="", simulation_input_file="",simulation_version=""):
         """
         Initialize SimulatedDataPoint2 instance.
         Args:
@@ -1114,10 +1124,11 @@ class SimulatedDataPoint2(DataPoint2):
             simulation_start=str(simulation_start) if simulation_start is not None else "",
             simulation_end=str(simulation_end) if simulation_end is not None else "",
             simulation_code=str(simulation_code) if simulation_code is not None else "",
-            simulation_input_file=str(simulation_input_file) if simulation_input_file is not None else ""
+            simulation_input_file=str(simulation_input_file) if simulation_input_file is not None else "",
+            simulation_version=str(simulation_version) if simulation_version is not None else ""
         )
 
-    def add_simulation_data(self, simulation_start=None, simulation_end=None, simulation_code="", simulation_input_file=""):
+    def add_simulation_data(self, simulation_start=None, simulation_end=None, simulation_code="", simulation_input_file="", simulation_version=""):
         """
         Adds simulation metadata.
         Args:
@@ -1128,5 +1139,5 @@ class SimulatedDataPoint2(DataPoint2):
         Returns:
             self: The SimulatedDataPoint2 instance.
         """
-        self.simulation_metadata.add_simulation_data(simulation_start, simulation_end, simulation_code, simulation_input_file)
+        self.simulation_metadata.add_simulation_data(simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version=simulation_version)
         return self
