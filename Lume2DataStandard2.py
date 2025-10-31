@@ -34,6 +34,8 @@ import impact
 import datetime
 from pmd_beamphysics import ParticleGroup
 
+SIMULATION_VERSION = "impact-t=3.1.2; lume-impact=0.10.1"
+
 # Load the list of simulation archive filenames from YAML
 impact_filenames = {'impact_archive': [os.path.join('Ex_Simulation_Data2', fname) for fname in os.listdir('Ex_Simulation_Data2') if fname.endswith('.h5')]}
 
@@ -235,7 +237,8 @@ for i in range(len(impact_filenames['impact_archive'])):
         simulation_start=I.particles['initial_particles']['mean_z'],
         simulation_end=I.particles['final_particles']['mean_z'],
         simulation_code='Impact',
-        simulation_input_file=input_contents
+        simulation_input_file=input_contents,
+        simulation_version=SIMULATION_VERSION
         )
 
     # Add scalar outputs from stats
