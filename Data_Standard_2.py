@@ -923,15 +923,19 @@ class DataPoint2:
                 else:
                     input_grp.attrs["units"] = getattr(single_input.units, "unitSymbol", str(single_input.units))
                 input_grp.attrs["description"] = single_input.description
+                input_grp.attrs["datum_type"] = "scalar"
             # Input distribution
             if isinstance(self.inputs.input_distribution, np.ndarray):
                 inputs_grp.create_dataset("input_distribution", data=self.inputs.input_distribution)
+                dist_type = "image"
             elif isinstance(self.inputs.input_distribution, ParticleGroup):
                 self.inputs.input_distribution.write(inputs_grp.create_group("input_distribution"))
+                dist_type = "ParticleGroup"
             # Input distribution attrs
             if hasattr(self.inputs, "input_distribution_attrs") and self.inputs.input_distribution_attrs:
                 for k, v in self.inputs.input_distribution_attrs.items():
                     inputs_grp["input_distribution"].attrs[k] = v
+                inputs_grp["input_distribution"].attrs["datum_type"] = dist_type
 
             # Save lattice
             lattice_grp = f.create_group("lattice")
