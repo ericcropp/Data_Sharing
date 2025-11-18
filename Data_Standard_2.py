@@ -200,10 +200,10 @@ class SingleInput:
 """
 Represents a single output datum for the data standard.
 """
-class SingleOutput:
-    def __init__(self, location="", datum=None, attrs=None, datum_name="", datum_type=None, units=None, location_primary=True):
+class SingleObservable:
+    def __init__(self, location="", datum=None, attrs=None, datum_name="", datum_type=None, units=None, location_primary=True,control=False):
         """
-        Initialize a SingleOutput instance.
+        Initialize a SingleObservable instance.
         Args:
             location: Location(s) associated with the output.
             datum: Output value(s).
@@ -222,6 +222,7 @@ class SingleOutput:
         self.datum = datum
         self.attrs = attrs if attrs is not None else {}
         self.datum_name = datum_name
+        self.control = control
         allowed_types = {"scalar", "image", "distribution"}
         if datum_type is not None and datum_type not in allowed_types:
             raise ValueError(f"datum_type must be one of {allowed_types}")
@@ -239,34 +240,43 @@ class SingleOutput:
         if isinstance(self.location, list):
             assert isinstance(self.datum, (list, np.ndarray)), "If location is a list, datum must be a list or np.ndarray."
             assert len(self.location) == len(self.datum), "location and datum lists must have the same length."
+        assert isinstance(self.datum, np.ndarray), "datum must be a numpy array."
+           
+        if self.datum_type == 'distribution':
+            
 
-        if self.datum_type == 'image':
-            if isinstance(self.location,list):
-                for d in self.datum:
-                    if not isinstance(d, np.ndarray):
-                        d = np.array(d)
-                    assert isinstance(d, np.ndarray) and d.ndim == 2, "Each item in datum must be a 2D np.ndarray for image data."
-            else:
-                if not isinstance(self.datum, np.ndarray):
-                    self.datum = np.array(self.datum)
-                assert isinstance(self.datum, np.ndarray) and self.datum.ndim == 2, "datum must be a 2D np.ndarray for image data."
-        elif self.datum_type == 'distribution':
-            if isinstance(self.location,list):
-                for d in self.datum:
-                    if not isinstance(d, ParticleGroup):
-                        d = ParticleGroup(d)
-                    assert isinstance(d, ParticleGroup), "Each item in datum must be a ParticleGroup for distribution data."
-            else:
-                if not isinstance(self.datum, ParticleGroup):
-                    self.datum = ParticleGroup(self.datum)
-                assert isinstance(self.datum, ParticleGroup), "datum must be a ParticleGroup for distribution data."
-
-        elif self.datum_type == 'scalar':
-            if isinstance(self.location,list):
-                for d in self.datum:
-                    assert isinstance(d, (int, float, np.integer, np.floating)), "Each item in datum must be a scalar (int or float) for scalar data."
-            else:
-                assert isinstance(self.datum, (int, float, np.integer, np.floating)), f"datum must be a scalar (int or float) for scalar data. Got type: {type(self.datum)}"
+            for d in self.datum.reshape(-1):
+                
+                assert isinstance(d, ParticleGroup), "Each item in datum must be a ParticleGroup for distribution data."
+            
+    def to_dict(self):
+        """
+        Returns a dictionary representation of the input.
+        Returns:
+            dict: Dictionary with input attributes.
+        """
+        # Ensure units is always a string for JSON serialization
+        if isinstance(self.units, str):
+            units_str = self.units
+        else:
+            units_str = getattr(self.units, "unitSymbol", str(self.units))
+        if self.control:
+            return {
+                "name": self.datum_name,
+                "value": self.datum,
+                "location": self.location,
+                "units": units_str,
+                "datum_type": self.datum_type,
+                # "description": self.description
+        }
+        else:
+            return {}
+        # elif self.datum_type == 'scalar':
+        #     if isinstance(self.location,list):
+        #         for d in self.datum:
+        #             assert isinstance(d, (int, float, np.integer, np.floating)), "Each item in datum must be a scalar (int or float) for scalar data."
+        #     else:
+        #         assert isinstance(self.datum, (int, float, np.integer, np.floating)), f"datum must be a scalar (int or float) for scalar data. Got type: {type(self.datum)}"
         
 
 def input_distribution_checker(input_distribution, input_distribution_attrs):
@@ -295,140 +305,140 @@ def input_distribution_checker(input_distribution, input_distribution_attrs):
 """
 Manages scalar inputs and input distributions for the data standard.
 """
-class Inputs:
-    def input_distribution_checker(self,allow_blank = False):
-        """
-        Validates the input distribution and its attributes.
-        Args:
-            allow_blank (bool): If True, allows blank input distribution.
-        Returns:
-            str: Type of input distribution ('image' or 'ParticleGroup').
-        Raises:
-            TypeError, ValueError, AssertionError: For invalid types or missing required attributes.
-        """
-        if allow_blank:
-            if (self.input_distribution is None or (isinstance(self.input_distribution, (list, dict)) and len(self.input_distribution) == 0)) and \
-                (self.input_distribution_attrs is None or (isinstance(self.input_distribution_attrs, dict) and len(self.input_distribution_attrs) == 0)):
-                return None
-        if not isinstance(self.input_distribution_attrs, dict):
-            raise TypeError("input_distribution_attrs must be a dict")
+# class Inputs:
+#     def input_distribution_checker(self,allow_blank = False):
+#         """
+#         Validates the input distribution and its attributes.
+#         Args:
+#             allow_blank (bool): If True, allows blank input distribution.
+#         Returns:
+#             str: Type of input distribution ('image' or 'ParticleGroup').
+#         Raises:
+#             TypeError, ValueError, AssertionError: For invalid types or missing required attributes.
+#         """
+#         if allow_blank:
+#             if (self.input_distribution is None or (isinstance(self.input_distribution, (list, dict)) and len(self.input_distribution) == 0)) and \
+#                 (self.input_distribution_attrs is None or (isinstance(self.input_distribution_attrs, dict) and len(self.input_distribution_attrs) == 0)):
+#                 return None
+#         if not isinstance(self.input_distribution_attrs, dict):
+#             raise TypeError("input_distribution_attrs must be a dict")
 
-        if isinstance(self.input_distribution, np.ndarray):
-            arr = self.input_distribution
-            if arr.ndim == 2:
-                # It's an image
-                if "pixel_calibration" not in self.input_distribution_attrs:
-                    raise AssertionError("input_distribution_attrs must contain 'pixel_calibration' for image input_distribution")
-                return "image"
-            else:
-                raise ValueError("input_distribution must be a 2D numpy array to be considered an image")
-        elif isinstance(self.input_distribution, ParticleGroup):
-            # Accept ParticleGroup as valid
-            return "ParticleGroup"
-        else:
-            raise ValueError("input_distribution must be a 2D numpy array or ParticleGroup, but received type: {}".format(type(self.input_distribution)))
+#         if isinstance(self.input_distribution, np.ndarray):
+#             arr = self.input_distribution
+#             if arr.ndim == 2:
+#                 # It's an image
+#                 if "pixel_calibration" not in self.input_distribution_attrs:
+#                     raise AssertionError("input_distribution_attrs must contain 'pixel_calibration' for image input_distribution")
+#                 return "image"
+#             else:
+#                 raise ValueError("input_distribution must be a 2D numpy array to be considered an image")
+#         elif isinstance(self.input_distribution, ParticleGroup):
+#             # Accept ParticleGroup as valid
+#             return "ParticleGroup"
+#         else:
+#             raise ValueError("input_distribution must be a 2D numpy array or ParticleGroup, but received type: {}".format(type(self.input_distribution)))
         
-    def add_input_distribution(self, input_distribution, input_distribution_attrs):
-        """
-        Adds input distribution and its attributes.
-        Args:
-            input_distribution: The input distribution (numpy array or ParticleGroup).
-            input_distribution_attrs (dict): Attributes for the input distribution.
-        """
-        self.input_distribution = input_distribution if input_distribution is not None else {}
-        self.input_distribution_attrs = input_distribution_attrs if input_distribution_attrs is not None else {}
-        self.input_distribution_checker(allow_blank=True)
+#     def add_input_distribution(self, input_distribution, input_distribution_attrs):
+#         """
+#         Adds input distribution and its attributes.
+#         Args:
+#             input_distribution: The input distribution (numpy array or ParticleGroup).
+#             input_distribution_attrs (dict): Attributes for the input distribution.
+#         """
+#         self.input_distribution = input_distribution if input_distribution is not None else {}
+#         self.input_distribution_attrs = input_distribution_attrs if input_distribution_attrs is not None else {}
+#         self.input_distribution_checker(allow_blank=True)
 
-    def check_scalar_inputs(self,allow_blank = False):
-        """
-        Validates scalar inputs.
-        Args:
-            allow_blank (bool): If True, allows blank scalar inputs.
-        Raises:
-            TypeError: For invalid types.
-        """
-        if not isinstance(self.scalar_inputs, dict):
-            raise TypeError("scalar_inputs must be a dict")
-        if allow_blank and len(self.scalar_inputs) == 0:
-            return
-        for name, single_input in self.scalar_inputs.items():
-            if not isinstance(single_input, SingleInput):
-                raise TypeError(f"Each item in scalar_inputs must be a SingleInput instance. Error at {name}")
+#     def check_scalar_inputs(self,allow_blank = False):
+#         """
+#         Validates scalar inputs.
+#         Args:
+#             allow_blank (bool): If True, allows blank scalar inputs.
+#         Raises:
+#             TypeError: For invalid types.
+#         """
+#         if not isinstance(self.scalar_inputs, dict):
+#             raise TypeError("scalar_inputs must be a dict")
+#         if allow_blank and len(self.scalar_inputs) == 0:
+#             return
+#         for name, single_input in self.scalar_inputs.items():
+#             if not isinstance(single_input, SingleInput):
+#                 raise TypeError(f"Each item in scalar_inputs must be a SingleInput instance. Error at {name}")
 
-    def add_scalar_inputs(self, scalar_inputs):
-        """
-        Adds scalar inputs to the Inputs instance.
-        Args:
-            scalar_inputs: Scalar inputs (DataFrame, dict, list, or Series).
-        Raises:
-            TypeError, ValueError: For invalid types or missing required keys.
-        """
-        if scalar_inputs is not None:
-            if isinstance(scalar_inputs, pd.DataFrame):
-                required_cols = {"name", "value", "location", "units", "description"}
-                if required_cols.issubset(scalar_inputs.columns):
-                    for _, row in scalar_inputs.iterrows():
-                        self.scalar_inputs[row["name"]] = SingleInput(
-                            name=row["name"],
-                            value=row["value"],
-                            location=row["location"],
-                            units=row["units"],
-                            description=row["description"]
-                    )
-                else:
-                    raise ValueError(f"scalar_inputs DataFrame must have columns: {required_cols}")
-            elif isinstance(scalar_inputs, dict):
-                for name, attrs in scalar_inputs.items():
-                    if not isinstance(attrs, dict):
-                        raise TypeError("Each scalar input must be a dictionary")
-                    self.scalar_inputs[name] = SingleInput(
-                        name=name,
-                        value=attrs.get("value"),
-                        location=attrs.get("location"),
-                        units=attrs.get("units"),
-                        description=attrs.get("description")
-                    )
-            elif isinstance(scalar_inputs,list):
-                for item in scalar_inputs:
-                    if not isinstance(item, dict) or "name" not in item:
-                        raise ValueError("Each item in the list must be a dictionary with at least a 'name' key")
-                    self.scalar_inputs[item["name"]] = SingleInput(
-                        name=item["name"],
-                        value=item.get("value"),
-                        location=item.get("location"),
-                        units=item.get("units"),
-                        description=item.get("description")
-                    )
-            elif isinstance(scalar_inputs, pd.Series):
-                # Convert Series to DataFrame of length 1 and process as DataFrame
-                df = scalar_inputs.to_frame().T if isinstance(scalar_inputs, pd.Series) else pd.DataFrame([scalar_inputs])
-                required_cols = {"name", "value", "location", "units", "description"}
-                if required_cols.issubset(df.columns):
-                    for _, row in df.iterrows():
-                        self.scalar_inputs[row["name"]] = SingleInput(
-                            name=row["name"],
-                            value=row["value"],
-                            location=row["location"],
-                            units=row["units"],
-                            description=row["description"]
-                        )
-                else:
-                    raise ValueError(f"scalar_inputs Series must have keys: {required_cols}")
-            else:
-                raise TypeError("scalar_inputs must be a pandas DataFrame, dict of dicts, list of dicts, or pandas Series")
-        self.check_scalar_inputs(allow_blank=True)
+#     def add_scalar_inputs(self, scalar_inputs):
+#         """
+#         Adds scalar inputs to the Inputs instance.
+#         Args:
+#             scalar_inputs: Scalar inputs (DataFrame, dict, list, or Series).
+#         Raises:
+#             TypeError, ValueError: For invalid types or missing required keys.
+#         """
+#         if scalar_inputs is not None:
+#             if isinstance(scalar_inputs, pd.DataFrame):
+#                 required_cols = {"name", "value", "location", "units", "description"}
+#                 if required_cols.issubset(scalar_inputs.columns):
+#                     for _, row in scalar_inputs.iterrows():
+#                         self.scalar_inputs[row["name"]] = SingleInput(
+#                             name=row["name"],
+#                             value=row["value"],
+#                             location=row["location"],
+#                             units=row["units"],
+#                             description=row["description"]
+#                     )
+#                 else:
+#                     raise ValueError(f"scalar_inputs DataFrame must have columns: {required_cols}")
+#             elif isinstance(scalar_inputs, dict):
+#                 for name, attrs in scalar_inputs.items():
+#                     if not isinstance(attrs, dict):
+#                         raise TypeError("Each scalar input must be a dictionary")
+#                     self.scalar_inputs[name] = SingleInput(
+#                         name=name,
+#                         value=attrs.get("value"),
+#                         location=attrs.get("location"),
+#                         units=attrs.get("units"),
+#                         description=attrs.get("description")
+#                     )
+#             elif isinstance(scalar_inputs,list):
+#                 for item in scalar_inputs:
+#                     if not isinstance(item, dict) or "name" not in item:
+#                         raise ValueError("Each item in the list must be a dictionary with at least a 'name' key")
+#                     self.scalar_inputs[item["name"]] = SingleInput(
+#                         name=item["name"],
+#                         value=item.get("value"),
+#                         location=item.get("location"),
+#                         units=item.get("units"),
+#                         description=item.get("description")
+#                     )
+#             elif isinstance(scalar_inputs, pd.Series):
+#                 # Convert Series to DataFrame of length 1 and process as DataFrame
+#                 df = scalar_inputs.to_frame().T if isinstance(scalar_inputs, pd.Series) else pd.DataFrame([scalar_inputs])
+#                 required_cols = {"name", "value", "location", "units", "description"}
+#                 if required_cols.issubset(df.columns):
+#                     for _, row in df.iterrows():
+#                         self.scalar_inputs[row["name"]] = SingleInput(
+#                             name=row["name"],
+#                             value=row["value"],
+#                             location=row["location"],
+#                             units=row["units"],
+#                             description=row["description"]
+#                         )
+#                 else:
+#                     raise ValueError(f"scalar_inputs Series must have keys: {required_cols}")
+#             else:
+#                 raise TypeError("scalar_inputs must be a pandas DataFrame, dict of dicts, list of dicts, or pandas Series")
+#         self.check_scalar_inputs(allow_blank=True)
             
-    def __init__(self, scalar_inputs=None, input_distribution=None, input_distribution_attrs=None):
-        """
-        Initialize Inputs instance.
-        Args:
-            scalar_inputs: Scalar inputs.
-            input_distribution: Input distribution.
-            input_distribution_attrs: Attributes for input distribution.
-        """
-        self.scalar_inputs = {}
-        self.add_input_distribution(input_distribution, input_distribution_attrs)
-        self.add_scalar_inputs(scalar_inputs)
+#     def __init__(self, scalar_inputs=None, input_distribution=None, input_distribution_attrs=None):
+#         """
+#         Initialize Inputs instance.
+#         Args:
+#             scalar_inputs: Scalar inputs.
+#             input_distribution: Input distribution.
+#             input_distribution_attrs: Attributes for input distribution.
+#         """
+#         self.scalar_inputs = {}
+#         self.add_input_distribution(input_distribution, input_distribution_attrs)
+#         self.add_scalar_inputs(scalar_inputs)
 
 """
 Represents lattice configuration for the data standard.  This will be replaced by PALS lattice standard in the future.
@@ -517,22 +527,22 @@ class Lattice:
 """
 Container for output data for the data standard.
 """
-class Outputs(list):
-    def __init__(self, output_list=None):
+class Observables(list):
+    def __init__(self, observable_list=None):
         """
-        Initialize Outputs instance.
+        Initialize Observables instance.
         Args:
-            output_list (list): List of output dictionaries.
+            observable_list (list): List of observable dictionaries.
         """
         super().__init__()
-        output_list = output_list if output_list is not None else []
+        observable_list = observable_list if observable_list is not None else []
 
         # self = []
-        for output in output_list:
+        for observable in observable_list:
 
-            self.add_output(output["location"], output["datum"], output["units"], output.get("attrs"), output.get("datum_name", ""), output.get("datum_type", None),output.get("location_primary", True))
+            self.add_observable(observable["location"], observable["datum"], observable["control"], observable["num_shots"], observable["units"], observable.get("attrs"), observable.get("datum_name", ""), observable.get("datum_type", None),observable.get("location_primary", True))
 
-    def add_output(self, location, datum, units='', attrs=None, datum_name="", datum_type=None, location_primary=True):
+    def add_observable(self, location, datum, control, num_shots, units='', attrs=None, datum_name="", datum_type=None, location_primary=True):
         """
         Adds an output to the Outputs list.
         Args:
@@ -544,39 +554,61 @@ class Outputs(list):
         """
         assert location is not None, "Output 'location' must not be None"
         assert datum is not None, "Output 'datum' must not be None"
-        assert len(datum) == len(location) if isinstance(location, list) else True, "If location is a list, datum must have the same length as location."
+        if not isinstance(datum, np.ndarray):
+            datum = np.array(datum, dtype=object)
+        if not isinstance(control,list):
+            control = [control]
+        if not isinstance(location, list):
+            location = [location]
+        if not isinstance(datum, np.ndarray):
+            datum = np.array(datum)
+        assert datum_type in {'scalar', 'image', 'distribution', None}, "datum_type must be 'scalar', 'image', 'distribution', or None."
+        
+
+        assert len(np.shape(datum)) == 4 , "datum must be a 4D array with shape (num_locations, num_shots, data_shape_x, data_shape_y), but got shape {}".format(np.shape(datum)) #num_locations, num_shots, data_shape_x, data_shape_y
+        assert np.shape(datum)[0] == len(location), "datum[0] must have the same length as location."
+        assert len(control) == len(location), "control must have the same length as location."
+        assert all(isinstance(c, bool) for c in control), "All elements in control must be bool"
+        assert np.shape(datum)[1] == num_shots, "datum[1] must have the same length as num_shots."
+        if datum_type == 'scalar' or datum_type == 'distribution':
+            assert np.shape(datum)[2] == 1 and np.shape(datum)[3] == 1, "For scalar datum_type, datum must have shape (num_locations, num_shots, 1, 1)."
+        if datum_type == 'image':
+            assert np.shape(datum)[2] > 1 and np.shape(datum)[3] > 1, "For image datum_type, datum must have shape (num_locations, num_shots, data_shape_x>1, data_shape_y>1)."
+        
         if location_primary not in [True, False]:
             raise ValueError("location_primary must be a boolean value")
         if location_primary and (isinstance(location, list) or isinstance(location, np.ndarray)) and len(location) > 1:
             for i, loc in enumerate(location):
-                output = SingleOutput(
+                output = SingleObservable(
                     location=loc,
-                    datum=datum[i],
+                    datum=datum[i,:,:,:],
                     attrs=attrs,
                     datum_name=datum_name,
                     datum_type=datum_type,
                     units=units,
-                    location_primary=location_primary
+                    location_primary=location_primary,
+                    control=control[i]
                 )
                 self.append(output)
-                self.output_checker(allow_blank=True)
+                self.observable_checker(allow_blank=True)
             
         else:
-            output = SingleOutput(
+            output = SingleObservable(
             location=location,
             datum=datum,
             attrs=attrs,
             datum_name=datum_name,
             datum_type=datum_type,
             units=units,
-            location_primary=location_primary
+            location_primary=location_primary,
+            control=control
             )
             self.append(output)
-            self.output_checker(allow_blank=True)
+            self.observable_checker(allow_blank=True)
 
-    def output_checker(self,allow_blank = False):
+    def observable_checker(self,allow_blank = False):
         """
-        Validates outputs in the Outputs list.
+        Validates observables in the Outputs list.
         Args:
             allow_blank (bool): If True, allows blank outputs.
         Raises:
@@ -584,39 +616,54 @@ class Outputs(list):
         """
         if allow_blank and len(self) == 0:
             return
-        for output in self:
-            if not isinstance(output, SingleOutput):
-                raise TypeError("Each item in outputs must be a SingleOutput instance.")
-            if output.datum_type not in {"scalar", "image", "distribution", None}:
+        for observable in self:
+            if not isinstance(observable, SingleObservable):
+                raise TypeError("Each item in outputs must be a SingleObservable instance.")
+            if observable.datum_type not in {"scalar", "image", "distribution", None}:
                 raise ValueError("datum_type must be 'scalar', 'image', 'distribution', or None.")
-            if output.datum_type == 'image':
-                if isinstance(output.location,list):
-                    for d in output.datum:
-                        if not isinstance(d, np.ndarray):
-                            d = np.array(d)
-                        assert isinstance(d, np.ndarray) and d.ndim == 2, "Each item in datum must be a 2D np.ndarray for image data."
+            
+            assert isinstance(observable.datum, np.ndarray), "datum must be a numpy array."
+            assert len(np.shape(observable.datum)) == 3 or len(np.shape(observable.datum)) == 4, "datum must have 3 or 4 dimensions."
+            if observable.datum_type == 'image':
+                if len(np.shape(observable.datum)) == 3:
+                    assert np.shape(observable.datum)[1] > 1 and np.shape(observable.datum)[2] > 1, "For image datum_type, datum must have shape (num_shots, data_shape_x>1, data_shape_y>1)."
                 else:
-                    if not isinstance(output.datum, np.ndarray):
-                        output.datum = np.array(output.datum)
-                    assert isinstance(output.datum, np.ndarray) and output.datum.ndim == 2, "datum must be a 2D np.ndarray for image data."
-            elif output.datum_type == 'distribution':
-                if isinstance(output.location,list):
-                    for d in output.datum:
-                        if not isinstance(d, ParticleGroup):
-                            d = ParticleGroup(d)
-                        assert isinstance(d, ParticleGroup), "Each item in datum must be a ParticleGroup for distribution data."
+                    assert np.shape(observable.datum)[2] > 1 and np.shape(observable.datum)[3] > 1, "For image datum_type, datum must have shape (num_locations, num_shots, data_shape_x>1, data_shape_y>1)."
+                # if isinstance(observable.location,list):
+                #     for d in observable.datum:
+                #         if not isinstance(d, np.ndarray):
+                #             d = np.array(d)
+                #         assert isinstance(d, np.ndarray) and d.ndim == 2, "Each item in datum must be a 2D np.ndarray for image data."
+                # else:
+                #     if not isinstance(observable.datum, np.ndarray):
+                #         observable.datum = np.array(observable.datum)
+                #     assert isinstance(observable.datum, np.ndarray) and observable.datum.ndim == 2, "datum must be a 2D np.ndarray for image data."
+            elif observable.datum_type == 'distribution':
+                # if isinstance(observable.location,list):
+                for d in observable.datum.reshape(-1):
+                    if not isinstance(d, ParticleGroup):
+                        d = ParticleGroup(d)
+                    assert isinstance(d, ParticleGroup), "Each item in datum must be a ParticleGroup for distribution data."
+                if len(np.shape(observable.datum)) == 3:
+                    assert np.shape(observable.datum)[1] == 1 and np.shape(observable.datum)[2] == 1, "For distribution datum_type, datum must have shape (num_shots, 1, 1)."
                 else:
-                    if not isinstance(output.datum, ParticleGroup):
-                        output.datum = ParticleGroup(output.datum)
-                    assert isinstance(output.datum, ParticleGroup), "datum must be a ParticleGroup for distribution data."
-            elif output.datum_type == 'scalar':
-                if isinstance(output.location,list):
-                    for d in output.datum:
-                        assert isinstance(d, (int, float, np.integer, np.floating)), "Each item in datum must be a scalar (int or float) for scalar data."
-                else:
-                    assert isinstance(output.datum, (int, float, np.integer, np.floating)), "datum must be a scalar (int or float) for scalar data."
-    
+                    assert np.shape(observable.datum)[2] == 1 and np.shape(observable.datum)[3] == 1, "For distribution datum_type, datum must have shape (num_locations, num_shots, 1, 1)."
+                # else:
+                #     if not isinstance(observable.datum, ParticleGroup):
+                #         observable.datum = ParticleGroup(observable.datum)
+                #     assert isinstance(observable.datum, ParticleGroup), "datum must be a ParticleGroup for distribution data."
+            elif observable.datum_type == 'scalar':
+                if len(np.shape(observable.datum)) == 3:
+                    assert np.shape(observable.datum)[1] == 1 and np.shape(observable.datum)[2] == 1, "For distribution datum_type, datum must have shape (num_shots, 1, 1)."
+                else:   
+                    assert np.shape(observable.datum)[2] == 1 and np.shape(observable.datum)[3] == 1, "For distribution datum_type, datum must have shape (num_locations, num_shots, 1, 1)."
+                # if isinstance(observable.location,list):
+                #     for d in observable.datum:
+                #         assert isinstance(d, (int, float, np.integer, np.floating)), "Each item in datum must be a scalar (int or float) for scalar data."
+                # else:
+                #     assert isinstance(observable.datum, (int, float, np.integer, np.floating)), "datum must be a scalar (int or float) for scalar data."
 
+    
 """
 Represents summary information for a data point.
 """
@@ -714,9 +761,9 @@ class RunInformation:
 Main class representing a standardized data point for the data standard.
 """
 class DataPoint2:
-    def __init__(self, scalar_inputs=None, input_distribution=None, lattice_location=None, lattice_files=None,
-                 output_list=None, summary_keys=None, summary_location='final', ID="", run_information=None,
-                 outputs=None, summary=None, input_distribution_attrs=None):
+    def __init__(self,  lattice_location=None, lattice_files=None,
+                 observable_list=None, summary_keys=None, summary_location='final', ID="", run_information=None
+                 ):
         """
         Initialize DataPoint2 instance.
         Args:
@@ -733,10 +780,10 @@ class DataPoint2:
             summary: Summary information.
             input_distribution_attrs: Attributes for input distribution.
         """
-        self.inputs = Inputs(scalar_inputs=scalar_inputs, input_distribution=input_distribution,
-                             input_distribution_attrs=input_distribution_attrs)
+        # self.inputs = Inputs(scalar_inputs=scalar_inputs, input_distribution=input_distribution,
+        #                      input_distribution_attrs=input_distribution_attrs)
         self.lattice = Lattice(lattice_location=lattice_location, lattice_files=lattice_files)
-        self.outputs = Outputs(output_list=output_list)
+        self.observables = Observables(observable_list=observable_list)
         self.summary = Summary(summary_keys=summary_keys, summary_location=summary_location)
         self.ID = ""
         self.run_information = RunInformation(run_information if run_information is not None else {})
@@ -748,27 +795,44 @@ class DataPoint2:
         Returns:
             self: The DataPoint2 instance with updated ID.
         """
-        # returns hash of the object
-        scalar_inputs_str = json.dumps({k: v.to_dict() for k, v in self.inputs.scalar_inputs.items()}, sort_keys=True)
+        # Serialize observables as a list of dicts for hashing
+        def serialize_obs_dict(obs_dict):
+            # Convert any ndarray values to lists
+            out = {}
+            for k, v in obs_dict.items():
+                if isinstance(v, np.ndarray):
+                    # Only serialize if all elements are numbers
+                    if np.issubdtype(v.dtype, np.number):
+                        out[k] = v.tolist()
+                    else:
+                        # Ignore non-numeric arrays
+                        continue
+                    
+                else:
+                    out[k] = v
+            return out
+
+        observables_list = [serialize_obs_dict(obs.to_dict()) for obs in self.observables]
+        scalar_inputs_str = json.dumps(observables_list, sort_keys=True)
         id_string = f"{scalar_inputs_str}{self.lattice.lattice_location}"
         self.ID = hashlib.md5(id_string.encode()).hexdigest()
         return self
     
-    def add_inputs(self, scalar_inputs=None, input_distribution=None, input_distribution_attrs=None):
-        """
-        Adds inputs to the data point.
-        Args:
-            scalar_inputs: Scalar inputs.
-            input_distribution: Input distribution.
-            input_distribution_attrs: Attributes for input distribution.
-        Returns:
-            self: The DataPoint2 instance.
-        """
-        if scalar_inputs is not None:
-            self.inputs.add_scalar_inputs(scalar_inputs)
-        if input_distribution is not None or input_distribution_attrs is not None:
-            self.inputs.add_input_distribution(input_distribution, input_distribution_attrs)
-        return self
+    # def add_inputs(self, scalar_inputs=None, input_distribution=None, input_distribution_attrs=None):
+    #     """
+    #     Adds inputs to the data point.
+    #     Args:
+    #         scalar_inputs: Scalar inputs.
+    #         input_distribution: Input distribution.
+    #         input_distribution_attrs: Attributes for input distribution.
+    #     Returns:
+    #         self: The DataPoint2 instance.
+    #     """
+    #     if scalar_inputs is not None:
+    #         self.inputs.add_scalar_inputs(scalar_inputs)
+    #     if input_distribution is not None or input_distribution_attrs is not None:
+    #         self.inputs.add_input_distribution(input_distribution, input_distribution_attrs)
+    #     return self
 
     def add_lattice(self, lattice_location=None, lattice_files=None):
         """
@@ -795,7 +859,7 @@ class DataPoint2:
         self.run_information.add_run_information(source, date, notes)
         return self
 
-    def add_observable(self, location, datum, units='', attrs=None, datum_name="", datum_type=None, location_primary=True):
+    def add_observable(self, location, datum, control, num_shots, units='', attrs=None, datum_name="", datum_type=None, location_primary=True):
         """
         Adds an output to the data point.
         Args:
@@ -807,7 +871,7 @@ class DataPoint2:
         Returns:
             self: The DataPoint2 instance.
         """
-        self.outputs.add_output(location, datum, units, attrs, datum_name, datum_type, location_primary=location_primary)
+        self.observables.add_observable(location, datum, control, num_shots, units, attrs, datum_name, datum_type, location_primary=location_primary)
         if datum_type == 'scalar':
             self.scalar_output_list.append(datum_name)
         return self
@@ -831,15 +895,18 @@ class DataPoint2:
             dict: Summary data.
         """
         summary = {}
+        d = {a.datum_name: a.to_dict() for a in self.observables if a.datum_type == 'scalar'}
+
         for key in self.summary.summary_keys:
-            if key in self.inputs.scalar_inputs:
-                summary[key] = self.inputs.scalar_inputs[key].value
+            if key in d.keys():
+                
+                summary[key] = d[key]['value']
             elif hasattr(self.run_information, key):
                 summary[key] = getattr(self.run_information, key)
             elif key == 'ID':
                 summary[key] = self.ID
             elif key.split(':')[-1] in self.scalar_output_list:
-                output_dict = next((d for d in self.outputs if d.datum_name == key.split(':')[-1]), None)
+                output_dict = next((d for d in self.observables if d.datum_name == key.split(':')[-1]), None)
                 if output_dict is not None:
                     if isinstance(output_dict.location, list) and len(output_dict.location) > 1:
                         if self.summary.summary_location == 'final':
@@ -873,10 +940,10 @@ class DataPoint2:
         Returns:
             self: The DataPoint2 instance.
         """
-        self.inputs.check_scalar_inputs()
-        self.inputs.input_distribution_checker()
+        # self.inputs.check_scalar_inputs()
+        # self.inputs.input_distribution_checker()
         self.lattice.lattice_checker()
-        self.outputs.output_checker()
+        self.observables.observable_checker()
         self.run_information.run_info_checker()
         self.summary.summary_checker()
         if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
@@ -912,30 +979,30 @@ class DataPoint2:
         # Note: self.inputs, self.lattice, self.outputs, self.summary, self.ID, self.run_information
         with h5py.File(filename, "w") as f:
             # Save inputs
-            inputs_grp = f.create_group("inputs")
+            # inputs_grp = f.create_group("inputs")
             # Scalar inputs
-            for name, single_input in self.inputs.scalar_inputs.items():
-                input_grp = inputs_grp.create_dataset(name,data=single_input.value)
-                input_grp.attrs["name"] = single_input.name
-                input_grp.attrs["location"] = single_input.location
-                if isinstance(single_input.units, str):
-                    input_grp.attrs["units"] = single_input.units
-                else:
-                    input_grp.attrs["units"] = getattr(single_input.units, "unitSymbol", str(single_input.units))
-                input_grp.attrs["description"] = single_input.description
-                input_grp.attrs["datum_type"] = "scalar"
-            # Input distribution
-            if isinstance(self.inputs.input_distribution, np.ndarray):
-                inputs_grp.create_dataset("input_distribution", data=self.inputs.input_distribution)
-                dist_type = "image"
-            elif isinstance(self.inputs.input_distribution, ParticleGroup):
-                self.inputs.input_distribution.write(inputs_grp.create_group("input_distribution"))
-                dist_type = "ParticleGroup"
-            # Input distribution attrs
-            if hasattr(self.inputs, "input_distribution_attrs") and self.inputs.input_distribution_attrs:
-                for k, v in self.inputs.input_distribution_attrs.items():
-                    inputs_grp["input_distribution"].attrs[k] = v
-                inputs_grp["input_distribution"].attrs["datum_type"] = dist_type
+            # for name, single_input in self.inputs.scalar_inputs.items():
+            #     input_grp = inputs_grp.create_dataset(name,data=single_input.value)
+            #     input_grp.attrs["name"] = single_input.name
+            #     input_grp.attrs["location"] = single_input.location
+            #     if isinstance(single_input.units, str):
+            #         input_grp.attrs["units"] = single_input.units
+            #     else:
+            #         input_grp.attrs["units"] = getattr(single_input.units, "unitSymbol", str(single_input.units))
+            #     input_grp.attrs["description"] = single_input.description
+            #     input_grp.attrs["datum_type"] = "scalar"
+            # # Input distribution
+            # if isinstance(self.inputs.input_distribution, np.ndarray):
+            #     inputs_grp.create_dataset("input_distribution", data=self.inputs.input_distribution)
+            #     dist_type = "image"
+            # elif isinstance(self.inputs.input_distribution, ParticleGroup):
+            #     self.inputs.input_distribution.write(inputs_grp.create_group("input_distribution"))
+            #     dist_type = "ParticleGroup"
+            # # Input distribution attrs
+            # if hasattr(self.inputs, "input_distribution_attrs") and self.inputs.input_distribution_attrs:
+            #     for k, v in self.inputs.input_distribution_attrs.items():
+            #         inputs_grp["input_distribution"].attrs[k] = v
+            #     inputs_grp["input_distribution"].attrs["datum_type"] = dist_type
 
             # Save lattice
             lattice_grp = f.create_group("lattice")
@@ -945,67 +1012,90 @@ class DataPoint2:
                 for fname, contents in self.lattice.lattice_files.items():
                     lattice_files_grp.create_dataset(fname, data=np.bytes_(contents))
 
-            # Save outputs
-            outputs_grp = f.create_group("observables")
-            for i, output in enumerate(self.outputs):
+            # Save observables
+            observables_grp = f.create_group("observables")
+            for i, observable in enumerate(self.observables):
 
-                if output.location_primary == False:
+                if observable.location_primary == False:
                     # Create or get the "Type_Grouped_Data" group
-                    if "Type_Grouped_Data" not in outputs_grp:
-                        type_grouped_grp = outputs_grp.create_group("Type_Grouped_Data")
+                    if "Type_Grouped_Data" not in observables_grp:
+                        type_grouped_grp = observables_grp.create_group("Type_Grouped_Data")
                     else:
-                        type_grouped_grp = outputs_grp["Type_Grouped_Data"]
+                        type_grouped_grp = observables_grp["Type_Grouped_Data"]
 
-                    if output.datum_type == "scalar":
-                        out_grp = type_grouped_grp.create_dataset(output.datum_name, data=output.datum)
-                    elif output.datum_type == "image":
-                        out_grp = type_grouped_grp.create_dataset(output.datum_name, data=np.array(output.datum))
-                    elif output.datum_type == "distribution":
-                        out_grp = type_grouped_grp.create_group(output.datum_name)
-                        if isinstance(output.datum, ParticleGroup):
-                            output.datum.write(out_grp)
+                    if observable.datum_type == "scalar":
+                        out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
+                    elif observable.datum_type == "image":
+                        out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
+                    elif observable.datum_type == "distribution":
+                        for j in range(np.shape(observable.datum)[0]):
+                            for k in range(np.shape(observable.datum)[1]):
+
+                                path = observable.datum_name + '_' + str(j) + '_' + str(k)
+                                out_grp = type_grouped_grp.create_group(path)
+                                # Store the path in an array for later reference
+                                if not hasattr(self, 'distribution_paths'):
+                                    distribution_paths = np.empty((np.shape(observable.datum)[0], np.shape(observable.datum)[1], 1, 1), dtype=object)
+                                distribution_paths[j, k, 0, 0] = path
+                                if isinstance(observable.datum, ParticleGroup):
+                                    observable.datum.write(out_grp)
+                        # Save the paths as a dataset
+                        out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=distribution_paths)
+                    
                     # out_grp = type_grouped_grp.create_group(output.datum_name)
-                    out_grp.attrs["location"] = output.location
-                    out_grp.attrs["datum_type"] = output.datum_type
+                    out_grp.attrs["location"] = observable.location
+                    out_grp.attrs["datum_type"] = observable.datum_type
+                    out_grp.attrs["control"] = observable.control
 
-                    if isinstance(output.units, str):
-                        out_grp.attrs["units"] = output.units
+                    if isinstance(observable.units, str):
+                        out_grp.attrs["units"] = observable.units
                     else:
-                        out_grp.attrs["units"] = getattr(output.units, "unitSymbol", str(output.units))
+                        out_grp.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
 
-                    for k, v in output.attrs.items():
+                    for k, v in observable.attrs.items():
                         out_grp.attrs[k] = v
                     # Save datum
                 else:
                     # print(output.location)
                     # Create or get the group for this output location
-                    if str(output.location) not in outputs_grp:
-                        out_grp = outputs_grp.create_group(str(output.location))
+                    if str(observable.location) not in observables_grp:
+                        out_grp = observables_grp.create_group(str(observable.location))
                     else:
-                        out_grp = outputs_grp[str(output.location)]
+                        out_grp = observables_grp[str(observable.location)]
 
                     # Save datum based on type
-                    if output.datum_type == "scalar":
+                    if observable.datum_type == "scalar":
                         # print(str(output.location) + "/" + output.datum_name)
-                        data_ds = out_grp.create_dataset(output.datum_name, data=output.datum)
-                    elif output.datum_type == "image":
-                        data_ds = out_grp.create_dataset(output.datum_name, data=np.array(output.datum))
-                    elif output.datum_type == "distribution":
-                        data_grp = out_grp.create_group(output.datum_name)
-                        if isinstance(output.datum, ParticleGroup):
-                            output.datum.write(data_grp)
-                        data_ds = data_grp
+                        data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
+                    elif observable.datum_type == "image":
+                        data_ds = out_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
+                    elif observable.datum_type == "distribution":
+                        # data_grp = out_grp.create_group(observable.datum_name)
+                        for j in range(np.shape(observable.datum)[0]):
+                            
+
+                                path = observable.datum_name + '_' + str(j) 
+                                data_grp = out_grp.create_group(path)
+                                # Store the path in an array for later reference
+                                if not hasattr(self, 'distribution_paths'):
+                                    distribution_paths = np.empty((np.shape(observable.datum)[0], 1, 1), dtype=object)
+                                distribution_paths[j, 0, 0] = path
+                                if isinstance(observable.datum, ParticleGroup):
+                                    observable.datum.write(data_grp)
+                        # Save the paths as a dataset
+                        data_ds = out_grp.create_dataset(observable.datum_name, data=distribution_paths)
                     else:
-                        data_ds = out_grp.create_dataset(output.datum_name, data=output.datum)
+                        data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
 
                     # Set attributes
-                    data_ds.attrs["location"] = output.location
-                    data_ds.attrs["datum_type"] = output.datum_type
-                    if isinstance(output.units, str):
-                        data_ds.attrs["units"] = output.units
+                    data_ds.attrs["location"] = observable.location
+                    data_ds.attrs["datum_type"] = observable.datum_type
+                    data_ds.attrs["control"] = observable.control
+                    if isinstance(observable.units, str):
+                        data_ds.attrs["units"] = observable.units
                     else:
-                        data_ds.attrs["units"] = getattr(output.units, "unitSymbol", str(output.units))
-                    for k, v in output.attrs.items():
+                        data_ds.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
+                    for k, v in observable.attrs.items():
                         data_ds.attrs[k] = v
 
 
@@ -1095,9 +1185,8 @@ class SimulationMetadata:
 class SimulatedDataPoint2(DataPoint2):
     
 
-    def __init__(self, scalar_inputs=None, input_distribution=None, lattice_location=None, lattice_files=None,
-                 output_list=None, summary_keys=None, summary_location='final', ID="", run_information=None,
-                 outputs=None, summary=None, input_distribution_attrs=None,
+    def __init__(self, lattice_location=None, lattice_files=None,
+                 observable_list=None, summary_keys=None, summary_location='final', ID="", run_information=None,
                  simulation_start=None, simulation_end=None, simulation_code="", simulation_input_file="",simulation_version=""):
         """
         Initialize SimulatedDataPoint2 instance.
@@ -1119,11 +1208,8 @@ class SimulatedDataPoint2(DataPoint2):
             simulation_code (str): Simulation code name.
             simulation_input_file (str): Input file for simulation.
         """
-        super().__init__(scalar_inputs=scalar_inputs, input_distribution=input_distribution,
-                         lattice_location=lattice_location, lattice_files=lattice_files,
-                         output_list=output_list, summary_keys=summary_keys, summary_location=summary_location,
-                         ID=ID, run_information=run_information, outputs=outputs, summary=summary,
-                         input_distribution_attrs=input_distribution_attrs)
+        super().__init__(lattice_location=lattice_location, lattice_files=lattice_files, observable_list=observable_list, summary_keys=summary_keys, summary_location=summary_location, ID=ID, run_information=run_information)
+        
         self.simulation_metadata = SimulationMetadata(
             simulation_start=str(simulation_start) if simulation_start is not None else "",
             simulation_end=str(simulation_end) if simulation_end is not None else "",

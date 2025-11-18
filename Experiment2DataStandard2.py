@@ -158,21 +158,43 @@ metadata = {'source':'FACET-II Injector','date':'2024-01-27','notes':'Processed 
 
 summary_table = []
 # Loop over first 10 shots in the dataset
+
 for i in range(len(all_data)):
     VCC = VCC_all[i,:,:]  # VCC image for shot i
     D = DataPoint2()      # Create new data point object
     scalar_inputs = {}
     # Populate scalar inputs for this shot
+    unique_suffix_dict = {}
     for col in cols.keys():
-        scalar_inputs[col] = {
-            "value": float(all_data[col].iloc[i]) if pd.notnull(all_data[col].iloc[i]) else np.nan,
-            "location": col,
-            "units": cols[col],
-            "description": ""  # Fill in description if available
-        }
-    D.add_inputs(scalar_inputs=scalar_inputs)
+        parts = col.split(':')
+        suffix = parts[-1]
+        prefix = ':'.join(parts[:3])
+        # print(prefix,suffix)
+        if suffix not in unique_suffix_dict:
+            unique_suffix_dict[suffix] = []
+        unique_suffix_dict[suffix].append(prefix)
+
+    # Add grouped scalar outputs to data point
+    for unique_suffix, prefixes in unique_suffix_dict.items():
+        # Group by unique units for this suffix
+        units_set = set([cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
+        for unit in units_set:
+            # Filter prefixes with this unit
+            unit_prefixes = [prefix for prefix in prefixes if cols.get(prefix + ':' + unique_suffix, '') == unit]
+            data = np.array([
+            float(all_data.get(prefix + ':' + unique_suffix, np.nan).iloc[i])
+            if (prefix + ':' + unique_suffix) in all_data.columns and pd.notnull(all_data[prefix + ':' + unique_suffix].iloc[i])
+            else np.nan
+            for prefix in unit_prefixes
+            ], dtype=float)
+            # print(unit_prefixes)
+            control = [True]*len(unit_prefixes)
+            data = data.reshape(-1, 1, 1, 1)
+            D.add_observable(location=unit_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+            
+    # D.add_inputs(scalar_inputs=scalar_inputs)
     # Add input distribution (camera image) and calibration
-    D.add_inputs(input_distribution=VCC, input_distribution_attrs={'pixel_calibration':all_data['CAMR:LT10:900:RESOLUTION'].iloc[i]})
+    # D.add_inputs(input_distribution=VCC, input_distribution_attrs={'pixel_calibration':all_data['CAMR:LT10:900:RESOLUTION'].iloc[i]})
     # Add lattice info
     D.add_lattice(lattice_location=lattice_location)
     # Add run metadata
@@ -203,10 +225,12 @@ for i in range(len(all_data)):
             for prefix in unit_prefixes
             ], dtype=float)
             # print(unit_prefixes)
-            D.add_observable(location=unit_prefixes, datum=data, attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+            control = [False]*len(unit_prefixes)
+            data = data.reshape(-1, 1, 1, 1)
+            D.add_observable(location=unit_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
 
     # Add image output (profile camera)
-    D.add_observable(location='PROF:IN10:571', datum=all_images[i,:,:], attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
+    D.add_observable(location='PROF:IN10:571', datum=np.expand_dims(np.expand_dims(all_images[i,:,:], 0), 0), control=False, num_shots=1, attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
 
     # Add summary info for this shot
     D.add_summary(summary_keys, summary_location='final')

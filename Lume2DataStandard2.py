@@ -208,12 +208,19 @@ for i in range(len(impact_filenames['impact_archive'])):
             "units": units,
             "description": ""   # Fill in description if available
         }
-    D.add_inputs(scalar_inputs=scalar_inputs)
+        datum = np.empty((1, 1, 1, 1))
+        datum[0, 0, 0, 0] = data_dict[col]
+        D.add_observable(location=col, control=[True], num_shots=1, datum=datum, attrs={}, datum_name=col, datum_type='scalar', location_primary=True)
+    # D.add_inputs(scalar_inputs=scalar_inputs)
     # Add input distribution (initial particles)
     input_dist = I.particles['initial_particles']
     if isinstance(input_dist, list):
         input_dist = input_dist[0]
-    D.add_inputs(input_distribution=input_dist, input_distribution_attrs={})
+    # D.add_inputs(input_distribution=input_dist, input_distribution_attrs={})
+
+    datum = np.empty((1, 1, 1, 1), dtype=object)
+    datum[0, 0, 0, 0] = I.particles['initial_particles']
+    D.add_observable(location=0, control=[False], num_shots=1, datum=datum, attrs={}, datum_name='initial_particles', datum_type='distribution', location_primary=True)
 
     # Add lattice files to the data point
     D.add_lattice(lattice_location='included', lattice_files={
@@ -243,17 +250,27 @@ for i in range(len(impact_filenames['impact_archive'])):
 
     # Add scalar outputs from stats
     for key, value in I.output['stats'].items():
+        value = np.array([[ [value] ]], dtype=float)
+        value = value.reshape(-1, 1, 1, 1)
         if key != 'mean_z':
             if key in output_unit_list:
-                D.add_observable(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, units=output_unit_list[key], datum_name=key, datum_type='scalar',location_primary=False)
+                D.add_observable(location=I.output['stats']['mean_z'].tolist(), control=[False]*len(I.output['stats']['mean_z'].tolist()), num_shots=1,datum=value, attrs={}, units=output_unit_list[key], datum_name=key, datum_type='scalar',location_primary=False)
             else:
-                D.add_observable(location=I.output['stats']['mean_z'].tolist(), datum=value, attrs={}, units='unitless', datum_name=key, datum_type='scalar',location_primary=False)
+                D.add_observable(location=I.output['stats']['mean_z'].tolist(), control=[False]*len(I.output['stats']['mean_z'].tolist()), num_shots=1, datum=value, attrs={}, units='unitless', datum_name=key, datum_type='scalar',location_primary=False)
     # Add distribution outputs from particles
     for key, value in I.output['particles'].items():
+        if isinstance(value, ParticleGroup):
+            datum = np.empty((1, 1, 1, 1), dtype=object)
+            datum[0, 0, 0, 0] = value 
         if key != 'final_particles' and key != 'initial_particles':
-            D.add_observable(location=key, datum=value, attrs={}, datum_name=key, datum_type='distribution',location_primary=True)
+            # D.add_observable(location=unit_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+
+    # Add image output (profile camera)
+            D.add_observable(location=key, control=[False], datum=datum, num_shots=1, attrs={}, datum_name=key, datum_type='distribution', location_primary=True)
     # Add final_particles as a distribution output
-    D.add_observable(location=I.particles['final_particles']['mean_z'], datum=I.particles['final_particles'], attrs={}, datum_name='final_particles', datum_type='distribution',location_primary=False)
+    datum = np.empty((1, 1, 1, 1), dtype=object)
+    datum[0, 0, 0, 0] = I.particles['final_particles'] 
+    D.add_observable(location=I.particles['final_particles']['mean_z'], control=[False], num_shots=1, datum=datum, attrs={}, datum_name='final_particles', datum_type='distribution', location_primary=False)
     # Ensure output directory exists for HDF5 files
     os.makedirs('./Test_Sim_Data2/', exist_ok=True)
     # Save the data point to HDF5
