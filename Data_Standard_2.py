@@ -148,7 +148,7 @@ def unit_checker(unit):
                     prefix = units.PREFIX_FACTOR.get(pro, units.SHORT_PREFIX_FACTOR.get(pro, 1))
 
 
-    return prefix, valid_unit
+    return float(prefix), valid_unit
 
 
 """
@@ -232,9 +232,16 @@ class SingleObservable:
         if isinstance(self.datum,list):
             self.datum = np.array(self.datum)
         prefix, valid_units = unit_checker(units)
+        # print(prefix, valid_units)
         if isinstance(prefix, (int, float)):
             if self.datum_type == 'scalar':
+                # print(prefix, valid_units)
+                # print(np.shape(self.datum))
+                # print(type(self.datum))
+                # print(type(prefix))
+                # print(self.datum)
                 self.datum = self.datum * prefix
+                # print(self.datum)
             
         self.units = units if valid_units == "Custom Unit" else valid_units
         if isinstance(self.location, list):
@@ -1075,6 +1082,9 @@ class DataPoint2:
                     if observable.datum_type == "scalar":
                         # print(str(output.location) + "/" + output.datum_name)
                         data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
+                        # print(observable.datum_name)
+                        # print(observable.datum)
+                        
                     elif observable.datum_type == "image":
                         data_ds = out_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
                     elif observable.datum_type == "distribution":
