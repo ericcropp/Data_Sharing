@@ -210,7 +210,9 @@ for i in range(len(impact_filenames['impact_archive'])):
         }
         datum = np.empty((1, 1, 1, 1))
         datum[0, 0, 0, 0] = data_dict[col]
-        D.add_observable(location=col, control=[True], num_shots=1, datum=datum, attrs={}, datum_name=col, datum_type='scalar', location_primary=True)
+        loc = col.split('_')[0].split('_')[0].split(':')[0]
+        # print(col,loc)
+        D.add_observable(location=loc, control=[True], num_shots=1, datum=datum, attrs={}, datum_name=col, datum_type='scalar', location_primary=True)
     # D.add_inputs(scalar_inputs=scalar_inputs)
     # Add input distribution (initial particles)
     input_dist = I.particles['initial_particles']

@@ -120,7 +120,7 @@ import json
 import h5py
 import os
 
-VERSION = '2025-10-30'
+VERSION = '2025-11-24'
 
 def unit_checker(unit):
     """
@@ -578,9 +578,10 @@ class Observables(list):
         if location_primary not in [True, False]:
             raise ValueError("location_primary must be a boolean value")
         if location_primary and (isinstance(location, list) or isinstance(location, np.ndarray)) and len(location) > 1:
+            # print('Case 1')
             for i, loc in enumerate(location):
                 output = SingleObservable(
-                    location=loc,
+                    location=[loc],
                     datum=datum[i,:,:,:],
                     attrs=attrs,
                     datum_name=datum_name,
@@ -593,6 +594,7 @@ class Observables(list):
                 self.observable_checker(allow_blank=True)
             
         else:
+            # print('Case 2')
             output = SingleObservable(
             location=location,
             datum=datum,
@@ -1028,6 +1030,7 @@ class DataPoint2:
                     elif observable.datum_type == "image":
                         out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
                     elif observable.datum_type == "distribution":
+                        # print(np.shape(observable.datum))
                         for j in range(np.shape(observable.datum)[0]):
                             for k in range(np.shape(observable.datum)[1]):
 
@@ -1037,8 +1040,9 @@ class DataPoint2:
                                 if not hasattr(self, 'distribution_paths'):
                                     distribution_paths = np.empty((np.shape(observable.datum)[0], np.shape(observable.datum)[1], 1, 1), dtype=object)
                                 distribution_paths[j, k, 0, 0] = path
-                                if isinstance(observable.datum, ParticleGroup):
-                                    observable.datum.write(out_grp)
+                                if isinstance(observable.datum[j,k,0,0], ParticleGroup):
+                                    # print(f"Writing distribution datum at {path}")
+                                    observable.datum[j,k,0,0].write(out_grp)
                         # Save the paths as a dataset
                         out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=distribution_paths)
                     
@@ -1058,10 +1062,14 @@ class DataPoint2:
                 else:
                     # print(output.location)
                     # Create or get the group for this output location
-                    if str(observable.location) not in observables_grp:
-                        out_grp = observables_grp.create_group(str(observable.location))
+                    # print(observable.location)
+                    assert isinstance(observable.location, list), "observable.location must be a list when location_primary is True"
+                    assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True"
+                    # print(str(observable.location[0]))
+                    if str(observable.location[0]) not in observables_grp:
+                        out_grp = observables_grp.create_group(str(observable.location[0]))
                     else:
-                        out_grp = observables_grp[str(observable.location)]
+                        out_grp = observables_grp[str(observable.location[0])]
 
                     # Save datum based on type
                     if observable.datum_type == "scalar":
@@ -1078,10 +1086,13 @@ class DataPoint2:
                                 data_grp = out_grp.create_group(path)
                                 # Store the path in an array for later reference
                                 if not hasattr(self, 'distribution_paths'):
-                                    distribution_paths = np.empty((np.shape(observable.datum)[0], 1, 1), dtype=object)
-                                distribution_paths[j, 0, 0] = path
-                                if isinstance(observable.datum, ParticleGroup):
-                                    observable.datum.write(data_grp)
+                                    distribution_paths = np.empty((1, np.shape(observable.datum)[0], 1, 1), dtype=object)
+                                distribution_paths[0,j,0, 0] = path
+                                if isinstance(observable.datum[0,j,0,0], ParticleGroup):
+                                    # print(f"Writing distribution datum at {path}")
+                                    observable.datum[0,j,0,0].write(data_grp)
+                                else:
+                                    print(f"Datum at {path} is not a ParticleGroup")
                         # Save the paths as a dataset
                         data_ds = out_grp.create_dataset(observable.datum_name, data=distribution_paths)
                     else:
