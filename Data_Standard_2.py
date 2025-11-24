@@ -566,7 +566,7 @@ class Observables(list):
         
 
         assert len(np.shape(datum)) == 4 , "datum must be a 4D array with shape (num_locations, num_shots, data_shape_x, data_shape_y), but got shape {}".format(np.shape(datum)) #num_locations, num_shots, data_shape_x, data_shape_y
-        assert np.shape(datum)[0] == len(location), "datum[0] must have the same length as location."
+        assert np.shape(datum)[0] == len(location), "datum[0] must have the same length as location. Got {} instead of {}. Location is: {}".format(len(datum[0]), len(location), location)
         assert len(control) == len(location), "control must have the same length as location."
         assert all(isinstance(c, bool) for c in control), "All elements in control must be bool"
         assert np.shape(datum)[1] == num_shots, "datum[1] must have the same length as num_shots."

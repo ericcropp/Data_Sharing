@@ -55,6 +55,36 @@ all_images = np.load(fileloc + 'total_images_stack_571.npy')
 
 # os.makedirs('./Test_Data/', exist_ok=True)
 
+loc_dict = {'SOLN:IN10:121': "SOL10121",
+            'SOLN:IN10:111': "SOL10111",
+            'QUAD:IN10:121': "CQ10121",
+            'QUAD:IN10:122': "SQ10122",
+            'QUAD:IN10:361': "QA10361",
+            'QUAD:IN10:371': "QA10371",
+            'QUAD:IN10:425': "QE10425",
+            'QUAD:IN10:441': "QE10441",
+            'QUAD:IN10:511': "QE10511",
+            'QUAD:IN10:525': "QE10525",
+            'KLYS:LI10:21': "GUNF",
+            'KLYS:LI10:31': "L0AF",
+            'KLYS:LI10:41': "L0BF",
+            'TCAV:IN20:490': "TCY10490",
+            'BPMS:IN10:221': 'BPM10221',
+            'BPMS:IN10:371': 'BPM10371',
+            'BPMS:IN10:425': 'BPM10425',
+            'BPMS:IN10:511': 'BPM10511',
+            'BPMS:IN10:525': 'BPM10525',
+            'BPMS:IN10:581': 'BPM10581',
+            'BPMS:IN10:631': 'BPM10631',
+            'BPMS:IN10:651': 'BPM10651',
+            'BPMS:IN10:731': 'BPM10731',
+            'BPMS:IN10:771': 'BPM10771',
+            'BPMS:IN10:781': 'BPM10781',
+            'TORO:IN10:591': 'IM10591',
+            'TORO:IN10:791': 'IM10791',
+            'CAMR:LT10:900': 'VCCF',
+            'PROF:IN10:571': 'PR10571'}
+
 # List of columns for scalar inputs (magnet and RF settings, etc.)
 cols = {'SOLN:IN10:121:BACT': 'kGm',
  'SOLN:IN10:111:BACT': 'kG',
@@ -89,15 +119,15 @@ cols = {'SOLN:IN10:121:BACT': 'kGm',
  'KLYS:LI10:41:ADES': 'unitless',
  'KLYS:LI10:41:AMPL': 'unitless',
  'KLYS:LI10:41:PHAS': 'unitless',
- 'KLYS:LI10:51:PHAS': 'unitless',
- 'KLYS:LI10:51:AMPL': 'unitless',
+#  'KLYS:LI10:51:PHAS': 'unitless',
+#  'KLYS:LI10:51:AMPL': 'unitless',
  'LASR:LT10:930:PWR': 'MW',
  'PMTR:HT10:950:PWR': 'MW',
  'IOC:SYS1:MP01:LSHUTCTL': 'unitless',
- 'KLYS:LI10:51:PDES': 'unitless',
- 'KLYS:LI10:51:AMPL': 'unitless',
- 'TCAV:IN20:490:TC0_C_1_TCTL': 'unitless',
- 'KLYS:LI20:51:BEAMCODE1_TCTL': 'unitless'}
+#  'KLYS:LI10:51:PDES': 'unitless',
+#  'KLYS:LI10:51:AMPL': 'unitless',
+ 'TCAV:IN20:490:TC0_C_1_TCTL': 'unitless'}
+#  'KLYS:LI20:51:BEAMCODE1_TCTL': 'unitless'}
 
 
 
@@ -190,8 +220,16 @@ for i in range(len(all_data)):
             # print(unit_prefixes)
             control = [True]*len(unit_prefixes)
             data = data.reshape(-1, 1, 1, 1)
-            D.add_observable(location=unit_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+            new_prefixes = []
+            for unit_prefix in unit_prefixes:
+                if unit_prefix in loc_dict:
+                    new_prefixes.append(loc_dict[unit_prefix])
+                else:
+                    new_prefixes.append(unit_prefix)
+                    # print(f"Warning: No location mapping for {unit_prefix}")
             
+            D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+
     # D.add_inputs(scalar_inputs=scalar_inputs)
     # Add input distribution (camera image) and calibration
     # D.add_inputs(input_distribution=VCC, input_distribution_attrs={'pixel_calibration':all_data['CAMR:LT10:900:RESOLUTION'].iloc[i]})
@@ -227,10 +265,18 @@ for i in range(len(all_data)):
             # print(unit_prefixes)
             control = [False]*len(unit_prefixes)
             data = data.reshape(-1, 1, 1, 1)
-            D.add_observable(location=unit_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+            new_prefixes = []
+            for unit_prefix in unit_prefixes:
+                if unit_prefix in loc_dict:
+                    new_prefixes.append(loc_dict[unit_prefix])
+                else:
+                    new_prefixes.append(unit_prefix)
+                    # print(f"Warning: No location mapping for {unit_prefix}")
+            
+            D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
 
     # Add image output (profile camera)
-    D.add_observable(location='PROF:IN10:571', datum=np.expand_dims(np.expand_dims(all_images[i,:,:], 0), 0), control=False, num_shots=1, attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
+    D.add_observable(location=loc_dict['PROF:IN10:571'], datum=np.expand_dims(np.expand_dims(all_images[i,:,:], 0), 0), control=False, num_shots=1, attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
 
     # Add summary info for this shot
     D.add_summary(summary_keys, summary_location='final')
