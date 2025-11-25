@@ -224,7 +224,11 @@ for i in range(len(all_data)):
             ], dtype=float)
             # print(unit_prefixes)
             control = [True]*len(unit_prefixes)
-            data = data.reshape(-1, 1, 1, 1)
+            if data.shape[0] == 1:
+                data = data.reshape(1, 1, 1, 1)
+            else:
+                data = data.reshape(-1, 1, 1, 1)
+            # print(np.shape(data))
             new_prefixes = []
             for unit_prefix in unit_prefixes:
                 if unit_prefix in loc_dict:
@@ -269,7 +273,11 @@ for i in range(len(all_data)):
             ], dtype=float)
             # print(unit_prefixes)
             control = [False]*len(unit_prefixes)
-            data = data.reshape(-1, 1, 1, 1)
+            # If data is length 1, reshape to (1, 1, 1, 1); else, keep shape as (N, 1, 1, 1)
+            if data.shape[0] == 1:
+                data = data.reshape(1, 1, 1, 1)
+            else:
+                data = data.reshape(-1, 1, 1, 1)
             new_prefixes = []
             for unit_prefix in unit_prefixes:
                 if unit_prefix in loc_dict:
@@ -299,7 +307,7 @@ for i in range(len(all_data)):
     summary_table.append(entry)
     
 # Write summary table to YAML file
-print(summary_table)
+# print(summary_table)
 
 with open('./Test_Data2/summary_table.yaml', 'w') as f:
     yaml.dump(summary_table, f)

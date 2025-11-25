@@ -589,9 +589,15 @@ class Observables(list):
         if location_primary and (isinstance(location, list) or isinstance(location, np.ndarray)) and len(location) > 1:
             # print('Case 1')
             for i, loc in enumerate(location):
+                d = datum[i,:,:,:]
+                if d.shape[0] == 1:
+                    d = d.reshape(1, 1, 1, 1)
+                else:
+                    d = d.reshape(-1, 1, 1, 1)
+
                 output = SingleObservable(
                     location=[loc],
-                    datum=datum[i,:,:,:],
+                    datum=d,
                     attrs=attrs,
                     datum_name=datum_name,
                     datum_type=datum_type,
