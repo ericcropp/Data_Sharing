@@ -451,14 +451,14 @@ Manages scalar inputs and input distributions for the data standard.
 Represents lattice configuration for the data standard.  This will be replaced by PALS lattice standard in the future.
 """
 class Lattice:
-    def __init__(self, lattice_location=None, lattice_files=None):
+    def __init__(self, lattice_location=None, lattice_files=None,PV_table=None):
         """
         Initialize Lattice instance.
         Args:
             lattice_location (str): Location of the lattice.
             lattice_files (list or dict): Lattice files or their contents.
         """
-        self.add_lattice(lattice_location, lattice_files)
+        self.add_lattice(lattice_location, lattice_files, PV_table)
 
     
 
@@ -489,16 +489,18 @@ class Lattice:
                     lattice_files_temp[file] = f.read()
             self.lattice_files = lattice_files_temp
         return self
-    
-    def add_lattice(self, lattice_location, lattice_files=None):
+
+    def add_lattice(self, lattice_location, lattice_files=None, PV_table=None):
         """
         Adds lattice location and files.
         Args:
             lattice_location (str): Location of the lattice.
             lattice_files (list or dict): Lattice files or their contents.
+            PV_table (dict): Optional dictionary of PVs and their values.
         """
         self.lattice_location = lattice_location
         self.lattice_files = lattice_files if lattice_files is not None else []
+        self.PV_table = PV_table if PV_table is not None else {}
         if self.lattice_files and isinstance(self.lattice_files, list) and all(isinstance(f, str) for f in self.lattice_files):
             self.process_lattice_files(self.lattice_files)
 
@@ -843,16 +845,15 @@ class DataPoint2:
     #         self.inputs.add_input_distribution(input_distribution, input_distribution_attrs)
     #     return self
 
-    def add_lattice(self, lattice_location=None, lattice_files=None):
+    def add_lattice(self, lattice_location=None, lattice_files=None, PV_table=None):
         """
         Adds lattice information to the data point.
         Args:
             lattice_location: Location of the lattice.
             lattice_files: Lattice files or their contents.
-        Returns:
-            self: The DataPoint2 instance.
+            PV_table (dict): Optional dictionary of PVs and their values.
         """
-        self.lattice.add_lattice(lattice_location, lattice_files)
+        self.lattice.add_lattice(lattice_location, lattice_files, PV_table)
         return self
     
     def add_run_information(self, source=None, date=None, notes=None):
@@ -903,32 +904,62 @@ class DataPoint2:
         Returns:
             dict: Summary data.
         """
+        # print(self.scalar_output_list)
         summary = {}
-        d = {a.datum_name: a.to_dict() for a in self.observables if a.datum_type == 'scalar'}
+        d = {}
+        # print(self.summary.summary_keys)
+        for a in self.observables:
+            # print(a.datum_name, a.datum_type, a.location, a.control)
+            if a.datum_type == 'scalar' and bool(np.prod(a.control)) and len(a.location) == 1:
+                # print('condition met')
+                new_key = a.location[0] + ':' + a.datum_name
+                d[new_key] = a.to_dict()
+        # print(d)
+        for key in d.keys():
+            # n = d[key]['location'][0]
 
-        for key in self.summary.summary_keys:
-            if key in d.keys():
+            data = np.squeeze(d[key]['value']).tolist()
+            if isinstance(data, (int, float, np.integer, np.floating)):
+                data = [data]
+            summary[key] = data
                 
-                summary[key] = d[key]['value']
-            elif hasattr(self.run_information, key):
-                summary[key] = getattr(self.run_information, key)
-            elif key == 'ID':
-                summary[key] = self.ID
-            elif key.split(':')[-1] in self.scalar_output_list:
-                output_dict = next((d for d in self.observables if d.datum_name == key.split(':')[-1]), None)
-                if output_dict is not None:
-                    if isinstance(output_dict.location, list) and len(output_dict.location) > 1:
-                        if self.summary.summary_location == 'final':
-                            idx = -1
-                        elif isinstance(self.summary.summary_location, str):
-                            if self.summary.summary_location in output_dict.location:
-                                idx = next(i for i, loc in enumerate(output_dict.location) if loc == self.summary.summary_location)
-                        else:
-                            idx = next(i for i, loc in enumerate(output_dict.location) if np.isclose(loc, self.summary.summary_location))
-                        if idx is not None:
-                            summary[key] = float(output_dict.datum[idx])
-                    else:
-                        summary[key] = float(output_dict.datum)
+            
+        for key in self.summary.summary_keys:
+            # print(key)
+            t = key.split(':')
+            if len(t) == 2:
+                loc = t[0]
+                name = t[1]
+                for observable in self.observables:
+                    if (
+                        observable.datum_name == name
+                        and observable.location == [loc]
+                        and isinstance(observable.location, list)
+                        and len(observable.location) == 1
+                    ):
+                        # print('condition met')
+                        data = np.squeeze(observable.datum).tolist()
+                        if isinstance(data, (int, float, np.integer, np.floating)):
+                            data = [data]
+                        summary[key] = data
+
+                        break
+               
+            # elif key.split(':')[-1] in self.scalar_output_list:
+            #     output_dict = next((d for d in self.observables if d.datum_name == key.split(':')[-1]), None)
+            #     if output_dict is not None:
+            #         if isinstance(output_dict.location, list) and len(output_dict.location) > 1:
+            #             if self.summary.summary_location == 'final':
+            #                 idx = -1
+            #             elif isinstance(self.summary.summary_location, str):
+            #                 if self.summary.summary_location in output_dict.location:
+            #                     idx = next(i for i, loc in enumerate(output_dict.location) if loc == self.summary.summary_location)
+            #             else:
+            #                 idx = next(i for i, loc in enumerate(output_dict.location) if np.isclose(loc, self.summary.summary_location))
+            #             if idx is not None:
+            #                 summary[key] = float(output_dict.datum[idx])
+            #         else:
+            #             summary[key] = float(output_dict.datum)
         summary["ID"] = self.ID
         if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
 
@@ -1020,6 +1051,10 @@ class DataPoint2:
                 lattice_files_grp = lattice_grp.create_group("lattice_files")
                 for fname, contents in self.lattice.lattice_files.items():
                     lattice_files_grp.create_dataset(fname, data=np.bytes_(contents))
+            # Save PV_table as attributes in lattice_grp if it exists and is a dict
+            if hasattr(self.lattice, "PV_table") and isinstance(self.lattice.PV_table, dict):
+                for k, v in self.lattice.PV_table.items():
+                    lattice_grp.attrs[k] = v
 
             # Save observables
             observables_grp = f.create_group("observables")

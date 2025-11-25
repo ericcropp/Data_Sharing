@@ -86,16 +86,7 @@ loc_dict = {'SOLN:IN10:121': "SOL10121",
             'PROF:IN10:571': 'PR10571'}
 
 # List of columns for scalar inputs (magnet and RF settings, etc.)
-cols = {'SOLN:IN10:121:BACT': 'kGm',
- 'SOLN:IN10:111:BACT': 'kG',
- 'QUAD:IN10:121:BACT': 'kG',
- 'QUAD:IN10:122:BACT': 'kG',
- 'QUAD:IN10:361:BACT': 'kG',
- 'QUAD:IN10:371:BACT': 'kG',
- 'QUAD:IN10:425:BACT': 'kG',
- 'QUAD:IN10:441:BACT': 'kG',
- 'QUAD:IN10:511:BACT': 'kG',
- 'QUAD:IN10:525:BACT': 'kG',
+cols = {
  'SOLN:IN10:121:BCTRL': 'kGm',
  'SOLN:IN10:111:BCTRL': 'kGm',
  'QUAD:IN10:121:BCTRL': 'kG',
@@ -108,31 +99,39 @@ cols = {'SOLN:IN10:121:BACT': 'kGm',
  'QUAD:IN10:525:BCTRL': 'kG',
  'KLYS:LI10:21:PDES': 'unitless',
  'KLYS:LI10:21:ADES': 'unitless',
- 'KLYS:LI10:21:AMPL': 'unitless',
- 'KLYS:LI10:21:PHAS': 'unitless',
- 'KLYS:LI10:21:SFB_PDIS': 'unitless',
+ 
  'KLYS:LI10:31:PDES': 'unitless',
  'KLYS:LI10:31:ADES': 'unitless',
- 'KLYS:LI10:31:AMPL': 'unitless',
- 'KLYS:LI10:31:PHAS': 'unitless',
+ 
  'KLYS:LI10:41:PDES': 'unitless',
  'KLYS:LI10:41:ADES': 'unitless',
- 'KLYS:LI10:41:AMPL': 'unitless',
- 'KLYS:LI10:41:PHAS': 'unitless',
+ 
 #  'KLYS:LI10:51:PHAS': 'unitless',
 #  'KLYS:LI10:51:AMPL': 'unitless',
- 'LASR:LT10:930:PWR': 'MW',
- 'PMTR:HT10:950:PWR': 'MW',
- 'IOC:SYS1:MP01:LSHUTCTL': 'unitless',
-#  'KLYS:LI10:51:PDES': 'unitless',
-#  'KLYS:LI10:51:AMPL': 'unitless',
- 'TCAV:IN20:490:TC0_C_1_TCTL': 'unitless'}
+}
 #  'KLYS:LI20:51:BEAMCODE1_TCTL': 'unitless'}
 
 
 
 # List of columns for scalar outputs (beam position, charge, camera, etc.)
-scalar_output_cols = {'BPMS:IN10:221:X': 'mm',
+scalar_output_cols = {'KLYS:LI10:21:AMPL': 'unitless',
+ 'KLYS:LI10:21:PHAS': 'unitless',
+ 'KLYS:LI10:21:SFB_PDIS': 'unitless',
+ 'KLYS:LI10:31:AMPL': 'unitless',
+ 'KLYS:LI10:31:PHAS': 'unitless',
+ 'KLYS:LI10:41:AMPL': 'unitless',
+ 'KLYS:LI10:41:PHAS': 'unitless',
+ 'SOLN:IN10:121:BACT': 'kGm',
+ 'SOLN:IN10:111:BACT': 'kG',
+ 'QUAD:IN10:121:BACT': 'kG',
+ 'QUAD:IN10:122:BACT': 'kG',
+ 'QUAD:IN10:361:BACT': 'kG',
+ 'QUAD:IN10:371:BACT': 'kG',
+ 'QUAD:IN10:425:BACT': 'kG',
+ 'QUAD:IN10:441:BACT': 'kG',
+ 'QUAD:IN10:511:BACT': 'kG',
+ 'QUAD:IN10:525:BACT': 'kG',
+ 'BPMS:IN10:221:X': 'mm',
  'BPMS:IN10:371:X': 'mm',
  'BPMS:IN10:425:X': 'mm',
  'BPMS:IN10:511:X': 'mm',
@@ -174,12 +173,18 @@ scalar_output_cols = {'BPMS:IN10:221:X': 'mm',
  'PROF:IN10:571:XRMS': 'mm',
  'PROF:IN10:571:YRMS': 'mm',
  'PROF:IN10:571:X': 'mm',
- 'PROF:IN10:571:Y': 'mm'}
+ 'PROF:IN10:571:Y': 'mm',
+ 'LASR:LT10:930:PWR': 'MW',
+ 'PMTR:HT10:950:PWR': 'MW',
+ 'IOC:SYS1:MP01:LSHUTCTL': 'unitless',
+#  'KLYS:LI10:51:PDES': 'unitless',
+#  'KLYS:LI10:51:AMPL': 'unitless',
+ 'TCAV:IN20:490:TC0_C_1_TCTL': 'unitless'}
 
 # List of keys to include in summary output
-summary_keys = [ 'PROF:IN10:571:XRMS',
-'PROF:IN10:571:YRMS']
-summary_keys += cols
+summary_keys = [ 'PR10571:XRMS',
+'PR10571:YRMS']
+# summary_keys += cols
 
 # Lattice location (URL to lattice definition)
 lattice_location = 'https://github.com/slaclab/facet2-lattice'
@@ -234,7 +239,7 @@ for i in range(len(all_data)):
     # Add input distribution (camera image) and calibration
     # D.add_inputs(input_distribution=VCC, input_distribution_attrs={'pixel_calibration':all_data['CAMR:LT10:900:RESOLUTION'].iloc[i]})
     # Add lattice info
-    D.add_lattice(lattice_location=lattice_location)
+    D.add_lattice(lattice_location=lattice_location, PV_table=loc_dict)
     # Add run metadata
     D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
 
@@ -287,10 +292,14 @@ for i in range(len(all_data)):
     D.saveHDF5('./Test_Data2/')
 
     # Add summary entry for this shot
+
     entry = {
         **D.summary.summary
     }
     summary_table.append(entry)
+    
 # Write summary table to YAML file
+print(summary_table)
+
 with open('./Test_Data2/summary_table.yaml', 'w') as f:
     yaml.dump(summary_table, f)
