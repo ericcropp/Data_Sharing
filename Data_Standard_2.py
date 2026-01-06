@@ -246,7 +246,7 @@ class SingleObservable:
         self.units = units if valid_units == "Custom Unit" else valid_units
         if isinstance(self.location, list):
             assert isinstance(self.datum, (list, np.ndarray)), "If location is a list, datum must be a list or np.ndarray."
-            assert len(self.location) == len(self.datum), "location and datum lists must have the same length."
+            assert len(self.location) == len(self.datum), "location and datum lists must have the same length. datum: {}, location: {}".format(np.shape(self.datum), np.shape(self.location))
         assert isinstance(self.datum, np.ndarray), "datum must be a numpy array."
            
         if self.datum_type == 'distribution':
@@ -578,7 +578,7 @@ class Observables(list):
         assert np.shape(datum)[0] == len(location), "datum[0] must have the same length as location. Got {} instead of {}. Location is: {}".format(len(datum[0]), len(location), location)
         assert len(control) == len(location), "control must have the same length as location."
         assert all(isinstance(c, bool) for c in control), "All elements in control must be bool"
-        assert np.shape(datum)[1] == num_shots, "datum[1] must have the same length as num_shots."
+        assert np.shape(datum)[1] == num_shots, "datum[1] must have the same length as num_shots. Got {} instead of {}.".format(np.shape(datum), num_shots)
         if datum_type == 'scalar' or datum_type == 'distribution':
             assert np.shape(datum)[2] == 1 and np.shape(datum)[3] == 1, "For scalar datum_type, datum must have shape (num_locations, num_shots, 1, 1)."
         if datum_type == 'image':
@@ -590,10 +590,9 @@ class Observables(list):
             # print('Case 1')
             for i, loc in enumerate(location):
                 d = datum[i,:,:,:]
-                if d.shape[0] == 1:
-                    d = d.reshape(1, 1, 1, 1)
-                else:
-                    d = d.reshape(-1, 1, 1, 1)
+                d = np.expand_dims(d, axis=0)
+                while d.ndim < 4:
+                    d = np.expand_dims(d, axis=-1)
 
                 output = SingleObservable(
                     location=[loc],
