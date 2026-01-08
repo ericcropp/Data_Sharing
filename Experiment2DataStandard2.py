@@ -86,7 +86,7 @@ loc_dict = {'SOLN:IN10:121': "SOL10121",
             'PROF:IN10:571': 'PR10571'}
 
 # List of columns for scalar inputs (magnet and RF settings, etc.)
-cols = {
+input_cols = {
  'SOLN:IN10:121:BCTRL': 'kGm',
  'SOLN:IN10:111:BCTRL': 'kGm',
  'QUAD:IN10:121:BCTRL': 'kG',
@@ -194,233 +194,268 @@ metadata = {'source':'FACET-II Injector','date':'2024-01-27','notes':'Processed 
 summary_table = []
 # Loop over first 5 shots in the dataset
 
-for i in range(5):
-    VCC = VCC_all[i,:,:]  # VCC image for shot i
+def add_datapoints(batch_dim,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys):
+    # Add VCC datapoint
     D = DataPoint2()      # Create new data point object
-    scalar_inputs = {}
+    D.add_observable(batch_dims=batch_dim, feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'pixel_calibration':data_subset['CAMR:LT10:900:RESOLUTION'].values.tolist()}, data_names='VCC_Image', units='um',location_primary=True,control=True)
+    D.add_observable(batch_dims=batch_dim, feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'pixel_calibration':data_subset['PROF:IN10:571:RESOLUTION'].values.tolist()}, data_names='Screen_Image', units='um',location_primary=True,control=False)
     # Populate scalar inputs for this shot
-    unique_suffix_dict = {}
-    for col in cols.keys():
-        parts = col.split(':')
-        suffix = parts[-1]
-        prefix = ':'.join(parts[:3])
-        # print(prefix,suffix)
-        if suffix not in unique_suffix_dict:
-            unique_suffix_dict[suffix] = []
-        unique_suffix_dict[suffix].append(prefix)
+    for col in input_cols.keys():
+        col_data = np.asarray(data_subset[col].values, dtype=np.float64)
 
-    # Add grouped scalar outputs to data point
-    for unique_suffix, prefixes in unique_suffix_dict.items():
-        # Group by unique units for this suffix
-        units_set = set([cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
-        for unit in units_set:
-            # Filter prefixes with this unit
-            unit_prefixes = [prefix for prefix in prefixes if cols.get(prefix + ':' + unique_suffix, '') == unit]
-            data = np.array([
-            float(all_data.get(prefix + ':' + unique_suffix, np.nan).iloc[i])
-            if (prefix + ':' + unique_suffix) in all_data.columns and pd.notnull(all_data[prefix + ':' + unique_suffix].iloc[i])
-            else np.nan
-            for prefix in unit_prefixes
-            ], dtype=float)
-            # print(unit_prefixes)
-            control = [True]*len(unit_prefixes)
-            if data.shape[0] == 1:
-                data = data.reshape(1, 1, 1, 1)
-            else:
-                data = data.reshape(-1, 1, 1, 1)
-            # print(np.shape(data))
-            new_prefixes = []
-            for unit_prefix in unit_prefixes:
-                if unit_prefix in loc_dict:
-                    new_prefixes.append(loc_dict[unit_prefix])
-                else:
-                    new_prefixes.append(unit_prefix)
-                    # print(f"Warning: No location mapping for {unit_prefix}")
-            
-            D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+        D.add_observable(batch_dims=batch_dim, feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=input_cols[col], data_names=':'.join(col.split(':')[3:]),location_primary=True,control=True)
+    for col in scalar_output_cols.keys():
+        col_data = np.asarray(data_subset[col].values, dtype=np.float64)
 
-    # D.add_inputs(scalar_inputs=scalar_inputs)
-    # Add input distribution (camera image) and calibration
-    # D.add_inputs(input_distribution=VCC, input_distribution_attrs={'pixel_calibration':all_data['CAMR:LT10:900:RESOLUTION'].iloc[i]})
-    # Add lattice info
+        D.add_observable(batch_dims=batch_dim, feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=scalar_output_cols[col], data_names=':'.join(col.split(':')[3:]),location_primary=True,control=False)
+
     D.add_lattice(lattice_location=lattice_location, PV_table=loc_dict)
     # Add run metadata
     D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
 
-    # Group scalar outputs by suffix (e.g., X, Y, TMIT)
-    unique_suffix_dict = {}
-    for col in scalar_output_cols.keys():
-        parts = col.split(':')
-        suffix = parts[-1]
-        prefix = ':'.join(parts[:3])
-        # print(prefix,suffix)
-        if suffix not in unique_suffix_dict:
-            unique_suffix_dict[suffix] = []
-        unique_suffix_dict[suffix].append(prefix)
-
-    # Add grouped scalar outputs to data point
-    for unique_suffix, prefixes in unique_suffix_dict.items():
-        # Group by unique units for this suffix
-        units_set = set([scalar_output_cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
-        for unit in units_set:
-            # Filter prefixes with this unit
-            unit_prefixes = [prefix for prefix in prefixes if scalar_output_cols.get(prefix + ':' + unique_suffix, '') == unit]
-            data = np.array([
-            float(all_data.get(prefix + ':' + unique_suffix, np.nan).iloc[i])
-            if (prefix + ':' + unique_suffix) in all_data.columns and pd.notnull(all_data[prefix + ':' + unique_suffix].iloc[i])
-            else np.nan
-            for prefix in unit_prefixes
-            ], dtype=float)
-            # print(unit_prefixes)
-            control = [False]*len(unit_prefixes)
-            # If data is length 1, reshape to (1, 1, 1, 1); else, keep shape as (N, 1, 1, 1)
-            if data.shape[0] == 1:
-                data = data.reshape(1, 1, 1, 1)
-            else:
-                data = data.reshape(-1, 1, 1, 1)
-            new_prefixes = []
-            for unit_prefix in unit_prefixes:
-                if unit_prefix in loc_dict:
-                    new_prefixes.append(loc_dict[unit_prefix])
-                else:
-                    new_prefixes.append(unit_prefix)
-                    # print(f"Warning: No location mapping for {unit_prefix}")
-            
-            D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
-
-    # Add image output (profile camera)
-    D.add_observable(location=loc_dict['PROF:IN10:571'], datum=np.expand_dims(np.expand_dims(all_images[i,:,:], 0), 0), control=False, num_shots=1, attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
-
-    # Add summary info for this shot
     D.add_summary(summary_keys, summary_location='final')
 
-    # Ensure output directory exists
     os.makedirs('./Test_Data2/', exist_ok=True)
     # Save data point to HDF5
     D.saveHDF5('./Test_Data2/')
+for i in range(5):
+    VCC = VCC_all[i:i+1,:,:]  # VCC image for shot i with singleton shot dimension
+    data_subset = all_data.loc[[i]]
+    image_subset = all_images[i:i+1,:,:]
+    add_datapoints(0,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys)
 
-    # Add summary entry for this shot
+VCC = VCC_all[5:10,:,:]  # VCC image for shot i with singleton shot dimension
+data_subset = all_data.loc[5:9]
+image_subset = all_images[5:10,:,:]
+add_datapoints(0,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys)
 
-    entry = {
-        **D.summary.summary
-    }
-    summary_table.append(entry)
+
+
+# for i in range(5):
+#     VCC = VCC_all[i,:,:]  # VCC image for shot i
+#     D = DataPoint2()      # Create new data point object
+#     scalar_inputs = {}
+#     # Populate scalar inputs for this shot
+#     unique_suffix_dict = {}
+#     for col in input_cols.keys():
+#         parts = col.split(':')
+#         suffix = parts[-1]
+#         prefix = ':'.join(parts[:3])
+#         # print(prefix,suffix)
+#         if suffix not in unique_suffix_dict:
+#             unique_suffix_dict[suffix] = []
+#         unique_suffix_dict[suffix].append(prefix)
+
+#     # Add grouped scalar outputs to data point
+#     for unique_suffix, prefixes in unique_suffix_dict.items():
+#         # Group by unique units for this suffix
+#         units_set = set([input_cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
+#         for unit in units_set:
+#             # Filter prefixes with this unit
+#             unit_prefixes = [prefix for prefix in prefixes if input_cols.get(prefix + ':' + unique_suffix, '') == unit]
+#             data = np.array([
+#             float(all_data.get(prefix + ':' + unique_suffix, np.nan).iloc[i])
+#             if (prefix + ':' + unique_suffix) in all_data.columns and pd.notnull(all_data[prefix + ':' + unique_suffix].iloc[i])
+#             else np.nan
+#             for prefix in unit_prefixes
+#             ], dtype=float)
+#             # print(unit_prefixes)
+#             control = [True]*len(unit_prefixes)
+#             if data.shape[0] == 1:
+#                 data = data.reshape(1, 1, 1, 1)
+#             else:
+#                 data = data.reshape(-1, 1, 1, 1)
+#             # print(np.shape(data))
+#             new_prefixes = []
+#             for unit_prefix in unit_prefixes:
+#                 if unit_prefix in loc_dict:
+#                     new_prefixes.append(loc_dict[unit_prefix])
+#                 else:
+#                     new_prefixes.append(unit_prefix)
+#                     # print(f"Warning: No location mapping for {unit_prefix}")
+            
+#             D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+
+#     # D.add_inputs(scalar_inputs=scalar_inputs)
+#     # Add input distribution (camera image) and calibration
+#     # D.add_inputs(input_distribution=VCC, input_distribution_attrs={'pixel_calibration':all_data['CAMR:LT10:900:RESOLUTION'].iloc[i]})
+#     # Add lattice info
+#     D.add_lattice(lattice_location=lattice_location, PV_table=loc_dict)
+#     # Add run metadata
+#     D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
+
+#     # Group scalar outputs by suffix (e.g., X, Y, TMIT)
+#     unique_suffix_dict = {}
+#     for col in scalar_output_cols.keys():
+#         parts = col.split(':')
+#         suffix = parts[-1]
+#         prefix = ':'.join(parts[:3])
+#         # print(prefix,suffix)
+#         if suffix not in unique_suffix_dict:
+#             unique_suffix_dict[suffix] = []
+#         unique_suffix_dict[suffix].append(prefix)
+
+#     # Add grouped scalar outputs to data point
+#     for unique_suffix, prefixes in unique_suffix_dict.items():
+#         # Group by unique units for this suffix
+#         units_set = set([scalar_output_cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
+#         for unit in units_set:
+#             # Filter prefixes with this unit
+#             unit_prefixes = [prefix for prefix in prefixes if scalar_output_cols.get(prefix + ':' + unique_suffix, '') == unit]
+#             data = np.array([
+#             float(all_data.get(prefix + ':' + unique_suffix, np.nan).iloc[i])
+#             if (prefix + ':' + unique_suffix) in all_data.columns and pd.notnull(all_data[prefix + ':' + unique_suffix].iloc[i])
+#             else np.nan
+#             for prefix in unit_prefixes
+#             ], dtype=float)
+#             # print(unit_prefixes)
+#             control = [False]*len(unit_prefixes)
+#             # If data is length 1, reshape to (1, 1, 1, 1); else, keep shape as (N, 1, 1, 1)
+#             if data.shape[0] == 1:
+#                 data = data.reshape(1, 1, 1, 1)
+#             else:
+#                 data = data.reshape(-1, 1, 1, 1)
+#             new_prefixes = []
+#             for unit_prefix in unit_prefixes:
+#                 if unit_prefix in loc_dict:
+#                     new_prefixes.append(loc_dict[unit_prefix])
+#                 else:
+#                     new_prefixes.append(unit_prefix)
+#                     # print(f"Warning: No location mapping for {unit_prefix}")
+            
+#             D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+
+#     # Add image output (profile camera)
+#     D.add_observable(location=loc_dict['PROF:IN10:571'], datum=np.expand_dims(np.expand_dims(all_images[i,:,:], 0), 0), control=False, num_shots=1, attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
+
+#     # Add summary info for this shot
+#     D.add_summary(summary_keys, summary_location='final')
+
+#     # Ensure output directory exists
+#     os.makedirs('./Test_Data2/', exist_ok=True)
+#     # Save data point to HDF5
+#     D.saveHDF5('./Test_Data2/')
+
+#     # Add summary entry for this shot
+
+#     entry = {
+#         **D.summary.summary
+#     }
+#     summary_table.append(entry)
     
-# Write summary table to YAML file
-# print(summary_table)
+# # Write summary table to YAML file
+# # print(summary_table)
 
-# Do final 5 shots as one
+# # Do final 5 shots as one
 
-VCC = VCC_all[5:10,:,:]  # VCC image for shot i
-D = DataPoint2()      # Create new data point object
-scalar_inputs = {}
-# Populate scalar inputs for this shot
-unique_suffix_dict = {}
-for col in cols.keys():
-    parts = col.split(':')
-    suffix = parts[-1]
-    prefix = ':'.join(parts[:3])
-    # print(prefix,suffix)
-    if suffix not in unique_suffix_dict:
-        unique_suffix_dict[suffix] = []
-    unique_suffix_dict[suffix].append(prefix)
+# VCC = VCC_all[5:10,:,:]  # VCC image for shot i
+# D = DataPoint2()      # Create new data point object
+# scalar_inputs = {}
+# # Populate scalar inputs for this shot
+# unique_suffix_dict = {}
+# for col in input_cols.keys():
+#     parts = col.split(':')
+#     suffix = parts[-1]
+#     prefix = ':'.join(parts[:3])
+#     # print(prefix,suffix)
+#     if suffix not in unique_suffix_dict:
+#         unique_suffix_dict[suffix] = []
+#     unique_suffix_dict[suffix].append(prefix)
 
-# Add grouped scalar outputs to data point
-for unique_suffix, prefixes in unique_suffix_dict.items():
-    # Group by unique units for this suffix
-    units_set = set([cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
-    for unit in units_set:
-        # Filter prefixes with this unit
-        unit_prefixes = [prefix for prefix in prefixes if cols.get(prefix + ':' + unique_suffix, '') == unit]
-        data = [
-            float(val) if pd.notnull(val) else np.nan
-            for prefix in unit_prefixes
-            for val in all_data.get(prefix + ':' + unique_suffix, pd.Series([np.nan]*5)).iloc[5:10]
-        ]
-        data = np.array(data, dtype=float)
-        # print(unit_prefixes)
-        control = [True]*len(unit_prefixes)
-        if data.shape[0] == 1:
-            data = data.reshape(1, 1, 1, 1)
-        else:
-            data = data.reshape(-1, 5, 1, 1)
-        # print(np.shape(data))
-        new_prefixes = []
-        for unit_prefix in unit_prefixes:
-            if unit_prefix in loc_dict:
-                new_prefixes.append(loc_dict[unit_prefix])
-            else:
-                new_prefixes.append(unit_prefix)
-                # print(f"Warning: No location mapping for {unit_prefix}")
-        print(np.shape(data))
-        D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=5,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+# # Add grouped scalar outputs to data point
+# for unique_suffix, prefixes in unique_suffix_dict.items():
+#     # Group by unique units for this suffix
+#     units_set = set([input_cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
+#     for unit in units_set:
+#         # Filter prefixes with this unit
+#         unit_prefixes = [prefix for prefix in prefixes if input_cols.get(prefix + ':' + unique_suffix, '') == unit]
+#         data = [
+#             float(val) if pd.notnull(val) else np.nan
+#             for prefix in unit_prefixes
+#             for val in all_data.get(prefix + ':' + unique_suffix, pd.Series([np.nan]*5)).iloc[5:10]
+#         ]
+#         data = np.array(data, dtype=float)
+#         # print(unit_prefixes)
+#         control = [True]*len(unit_prefixes)
+#         if data.shape[0] == 1:
+#             data = data.reshape(1, 1, 1, 1)
+#         else:
+#             data = data.reshape(-1, 5, 1, 1)
+#         # print(np.shape(data))
+#         new_prefixes = []
+#         for unit_prefix in unit_prefixes:
+#             if unit_prefix in loc_dict:
+#                 new_prefixes.append(loc_dict[unit_prefix])
+#             else:
+#                 new_prefixes.append(unit_prefix)
+#                 # print(f"Warning: No location mapping for {unit_prefix}")
+#         print(np.shape(data))
+#         D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=5,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
 
-# D.add_inputs(scalar_inputs=scalar_inputs)
-# Add input distribution (camera image) and calibration
-# D.add_inputs(input_distribution=VCC, input_distribution_attrs={'pixel_calibration':all_data['CAMR:LT10:900:RESOLUTION'].iloc[i]})
-# Add lattice info
-D.add_lattice(lattice_location=lattice_location, PV_table=loc_dict)
-# Add run metadata
-D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
+# # D.add_inputs(scalar_inputs=scalar_inputs)
+# # Add input distribution (camera image) and calibration
+# # D.add_inputs(input_distribution=VCC, input_distribution_attrs={'pixel_calibration':all_data['CAMR:LT10:900:RESOLUTION'].iloc[i]})
+# # Add lattice info
+# D.add_lattice(lattice_location=lattice_location, PV_table=loc_dict)
+# # Add run metadata
+# D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
 
-# Group scalar outputs by suffix (e.g., X, Y, TMIT)
-unique_suffix_dict = {}
-for col in scalar_output_cols.keys():
-    parts = col.split(':')
-    suffix = parts[-1]
-    prefix = ':'.join(parts[:3])
-    # print(prefix,suffix)
-    if suffix not in unique_suffix_dict:
-        unique_suffix_dict[suffix] = []
-    unique_suffix_dict[suffix].append(prefix)
+# # Group scalar outputs by suffix (e.g., X, Y, TMIT)
+# unique_suffix_dict = {}
+# for col in scalar_output_cols.keys():
+#     parts = col.split(':')
+#     suffix = parts[-1]
+#     prefix = ':'.join(parts[:3])
+#     # print(prefix,suffix)
+#     if suffix not in unique_suffix_dict:
+#         unique_suffix_dict[suffix] = []
+#     unique_suffix_dict[suffix].append(prefix)
 
-# Add grouped scalar outputs to data point
-for unique_suffix, prefixes in unique_suffix_dict.items():
-    # Group by unique units for this suffix
-    units_set = set([scalar_output_cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
-    for unit in units_set:
-        # Filter prefixes with this unit
-        unit_prefixes = [prefix for prefix in prefixes if scalar_output_cols.get(prefix + ':' + unique_suffix, '') == unit]
-        data = np.array([
-        float(all_data.get(prefix + ':' + unique_suffix, np.nan).iloc[i])
-        if (prefix + ':' + unique_suffix) in all_data.columns and pd.notnull(all_data[prefix + ':' + unique_suffix].iloc[i])
-        else np.nan
-        for prefix in unit_prefixes
-        ], dtype=float)
-        # print(unit_prefixes)
-        control = [False]*len(unit_prefixes)
-        # If data is length 1, reshape to (1, 1, 1, 1); else, keep shape as (N, 1, 1, 1)
-        if data.shape[0] == 1:
-            data = data.reshape(1, 1, 1, 1)
-        else:
-            data = data.reshape(-1,1, 1, 1)
-        new_prefixes = []
-        for unit_prefix in unit_prefixes:
-            if unit_prefix in loc_dict:
-                new_prefixes.append(loc_dict[unit_prefix])
-            else:
-                new_prefixes.append(unit_prefix)
-                # print(f"Warning: No location mapping for {unit_prefix}")
+# # Add grouped scalar outputs to data point
+# for unique_suffix, prefixes in unique_suffix_dict.items():
+#     # Group by unique units for this suffix
+#     units_set = set([scalar_output_cols.get(prefix + ':' + unique_suffix, '') for prefix in prefixes])
+#     for unit in units_set:
+#         # Filter prefixes with this unit
+#         unit_prefixes = [prefix for prefix in prefixes if scalar_output_cols.get(prefix + ':' + unique_suffix, '') == unit]
+#         data = np.array([
+#         float(all_data.get(prefix + ':' + unique_suffix, np.nan).iloc[i])
+#         if (prefix + ':' + unique_suffix) in all_data.columns and pd.notnull(all_data[prefix + ':' + unique_suffix].iloc[i])
+#         else np.nan
+#         for prefix in unit_prefixes
+#         ], dtype=float)
+#         # print(unit_prefixes)
+#         control = [False]*len(unit_prefixes)
+#         # If data is length 1, reshape to (1, 1, 1, 1); else, keep shape as (N, 1, 1, 1)
+#         if data.shape[0] == 1:
+#             data = data.reshape(1, 1, 1, 1)
+#         else:
+#             data = data.reshape(-1,1, 1, 1)
+#         new_prefixes = []
+#         for unit_prefix in unit_prefixes:
+#             if unit_prefix in loc_dict:
+#                 new_prefixes.append(loc_dict[unit_prefix])
+#             else:
+#                 new_prefixes.append(unit_prefix)
+#                 # print(f"Warning: No location mapping for {unit_prefix}")
         
-        D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=5,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+#         D.add_observable(location=new_prefixes, control=control, datum=data, num_shots=5,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
 
-# Add image output (profile camera)
-D.add_observable(location=loc_dict['PROF:IN10:571'], datum=np.expand_dims(np.expand_dims(all_images[5:10,:,:], 0), 0), control=False, num_shots=5, attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
+# # Add image output (profile camera)
+# D.add_observable(location=loc_dict['PROF:IN10:571'], datum=np.expand_dims(np.expand_dims(all_images[5:10,:,:], 0), 0), control=False, num_shots=5, attrs={'pixel_calibration':all_data['PROF:IN10:571:RESOLUTION'].iloc[i]}, datum_name='PROF:IN10:571:Image',datum_type='image',location_primary=True)
 
-# Add summary info for this shot
-D.add_summary(summary_keys, summary_location='final')
+# # Add summary info for this shot
+# D.add_summary(summary_keys, summary_location='final')
 
 # Ensure output directory exists
-os.makedirs('./Test_Data2/', exist_ok=True)
-# Save data point to HDF5
-D.saveHDF5('./Test_Data2/')
+
 
 # Add summary entry for this shot
 
-entry = {
-    **D.summary.summary
-}
-summary_table.append(entry)
+# entry = {
+#     **D.summary.summary
+# }
+# summary_table.append(entry)
 
-with open('./Test_Data2/summary_table.yaml', 'w') as f:
-    yaml.dump(summary_table, f)
+# with open('./Test_Data2/summary_table.yaml', 'w') as f:
+#     yaml.dump(summary_table, f)

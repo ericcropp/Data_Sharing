@@ -298,15 +298,7 @@ class SingleObservable:
         
         prefix, valid_units = unit_checker(units)
         # print(prefix, valid_units)
-        if isinstance(prefix, (int, float)):
-            if self.datum_type == 'scalar':
-                # print(prefix, valid_units)
-                # print(np.shape(self.datum))
-                # print(type(self.datum))
-                # print(type(prefix))
-                # print(self.datum)
-                self.datum = self.datum * prefix
-                # print(self.datum)
+        self.unit_multiplier = prefix
             
         self.units = units if valid_units == "Custom Unit" else valid_units
         if self.data is not None:
@@ -340,11 +332,10 @@ class SingleObservable:
             units_str = getattr(self.units, "unitSymbol", str(self.units))
         if self.control:
             return {
-                "name": self.datum_name,
-                "value": self.datum,
+                "name": self.data_names,
+                "value": self.data,
                 "location": self.location,
                 "units": units_str,
-                "datum_type": self.datum_type,
                 # "description": self.description
         }
         else:
@@ -586,7 +577,7 @@ class Lattice:
         if allow_blank and (self.lattice_location is None or self.lattice_location == "") and len(self.lattice_files) == 0:
             return
         if not isinstance(self.lattice_location, str):
-            raise TypeError("lattice_location must be a string")
+            raise TypeError("lattice_location must be a string, received type: {}".format(type(self.lattice_location)))
         if self.lattice_location == "":
             raise ValueError("lattice_location must not be empty")
         if self.lattice_location == 'included' and (self.lattice_files is None or len(self.lattice_files) == 0):
@@ -620,7 +611,7 @@ class Observables(list):
         # self = []
         for observable in observable_list:
 
-            self.add_observable(observable["location"], observable["datum"], observable["control"], observable["num_shots"], observable["units"], observable.get("attrs"), observable.get("datum_name", ""), observable.get("datum_type", None),observable.get("location_primary", True))
+            self.add_observable(observable["location"], observable["datum"], observable["control"], observable["num_shots"], observable["units"], observable.get("attrs"), observable.get("datum_name", ""),observable.get("location_primary", True))
 
     def add_observable(self, batch_dims=0, feature_dims=0, shots_per_batch=0, location=None, data=None, attrs=None, data_names=None, units=None, location_primary=True,control=False):
         """
@@ -1001,9 +992,9 @@ class DataPoint2:
         # print(self.summary.summary_keys)
         for a in self.observables:
             # print(a.datum_name, a.datum_type, a.location, a.control)
-            if a.datum_type == 'scalar' and bool(np.prod(a.control)) and len(a.location) == 1:
+            if np.shape(a.feature_dims) == 0 and len(a.location) == 1 and len(a.data_names) == 1:
                 # print('condition met')
-                new_key = a.location[0] + ':' + a.datum_name
+                new_key = a.location[0] + ':' + a.data_names[0]
                 d[new_key] = a.to_dict()
         # print(d)
         for key in d.keys():
@@ -1022,14 +1013,15 @@ class DataPoint2:
                 loc = t[0]
                 name = t[1]
                 for observable in self.observables:
+                    # print(observable.data_names,name, observable.location, [loc])
                     if (
-                        observable.datum_name == name
+                        observable.data_names == name
                         and observable.location == [loc]
-                        and isinstance(observable.location, list)
+                        and isinstance(observable.location, (list, np.ndarray))
                         and len(observable.location) == 1
                     ):
                         # print('condition met')
-                        data = np.squeeze(observable.datum).tolist()
+                        data = np.squeeze(observable.data).tolist()
                         if isinstance(data, (int, float, np.integer, np.floating)):
                             data = [data]
                         summary[key] = data
@@ -1200,9 +1192,11 @@ class DataPoint2:
                     #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=distribution_paths)
                     
                     # out_grp = type_grouped_grp.create_group(output.datum_name)
-                    out_grp.attrs["location"] = observable.location
-                    out_grp.attrs["datum_type"] = observable.datum_type
+                    location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
+                    out_grp.attrs["location"] = location_value
+                    # out_grp.attrs["datum_type"] = observable.datum_type
                     out_grp.attrs["control"] = observable.control
+
 
                     if isinstance(observable.units, str):
                         out_grp.attrs["units"] = observable.units
@@ -1216,8 +1210,9 @@ class DataPoint2:
                     # print(output.location)
                     # Create or get the group for this output location
                     # print(observable.location)
-                    assert isinstance(observable.location, list), "observable.location must be a list when location_primary is True"
-                    assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True"
+                    assert isinstance(observable.location, list) or isinstance(observable.location, np.ndarray), "observable.location must be a list or np array when location_primary is True, got {}".format(type(observable.location))
+                    
+                    assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True, got length {}".format(len(observable.location))
                     # print(str(observable.location[0]))
                     if str(observable.location[0]) not in observables_grp:
                         out_grp = observables_grp.create_group(str(observable.location[0]))
@@ -1237,9 +1232,9 @@ class DataPoint2:
                                 data[idx] = path
                                 pg.write(out_grp)
                                 j += 1
-                            out_grp = type_grouped_grp.create_dataset(obs_name, data=np.array(data))
+                            out_grp = out_grp.create_dataset(obs_name, data=np.array(data))
                         else:
-                            out_grp = type_grouped_grp.create_dataset(obs_name, data=np.array(observable.data))
+                            out_grp = out_grp.create_dataset(obs_name, data=np.array(observable.data))
 
                     # Save datum based on type
                     # if observable.datum_type == "scalar":
@@ -1272,8 +1267,9 @@ class DataPoint2:
                     #     data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
 
                     # Set attributes
-                    out_grp.attrs["location"] = observable.location
-                    out_grp.attrs["datum_type"] = observable.datum_type
+                    location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
+                    out_grp.attrs["location"] = location_value
+                    # out_grp.attrs["datum_type"] = observable.datum_type
                     out_grp.attrs["control"] = observable.control
                     if isinstance(observable.units, str):
                         out_grp.attrs["units"] = observable.units
@@ -1298,6 +1294,7 @@ class DataPoint2:
             f.attrs["run_information_notes"] = self.run_information.notes
             f.attrs["Data_Standard_Version"] = VERSION
             for key in self.summary.summary_keys:
+                # print(key)
                 f.attrs[key] = getattr(self.summary, "summary", {}).get(key, "")
             f.attrs["summary_location"] = self.summary.summary_location
 
