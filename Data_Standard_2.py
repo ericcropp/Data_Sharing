@@ -1101,32 +1101,6 @@ class DataPoint2:
             filename = fileloc
         # Note: self.inputs, self.lattice, self.outputs, self.summary, self.ID, self.run_information
         with h5py.File(filename, "w") as f:
-            # Save inputs
-            # inputs_grp = f.create_group("inputs")
-            # Scalar inputs
-            # for name, single_input in self.inputs.scalar_inputs.items():
-            #     input_grp = inputs_grp.create_dataset(name,data=single_input.value)
-            #     input_grp.attrs["name"] = single_input.name
-            #     input_grp.attrs["location"] = single_input.location
-            #     if isinstance(single_input.units, str):
-            #         input_grp.attrs["units"] = single_input.units
-            #     else:
-            #         input_grp.attrs["units"] = getattr(single_input.units, "unitSymbol", str(single_input.units))
-            #     input_grp.attrs["description"] = single_input.description
-            #     input_grp.attrs["datum_type"] = "scalar"
-            # # Input distribution
-            # if isinstance(self.inputs.input_distribution, np.ndarray):
-            #     inputs_grp.create_dataset("input_distribution", data=self.inputs.input_distribution)
-            #     dist_type = "image"
-            # elif isinstance(self.inputs.input_distribution, ParticleGroup):
-            #     self.inputs.input_distribution.write(inputs_grp.create_group("input_distribution"))
-            #     dist_type = "ParticleGroup"
-            # # Input distribution attrs
-            # if hasattr(self.inputs, "input_distribution_attrs") and self.inputs.input_distribution_attrs:
-            #     for k, v in self.inputs.input_distribution_attrs.items():
-            #         inputs_grp["input_distribution"].attrs[k] = v
-            #     inputs_grp["input_distribution"].attrs["datum_type"] = dist_type
-
             # Save lattice
             lattice_grp = f.create_group("lattice")
             lattice_grp.create_dataset("lattice_location", data=self.lattice.lattice_location)
@@ -1157,46 +1131,21 @@ class DataPoint2:
                     
                     if has_particlegroup:
                         data = copy.deepcopy(observable.data)
-                        for idx in np.ndindex(data):
+                        for idx in np.ndindex(data.shape):
                             pg = data[idx]
                             path = observable.data_names[0] + '_' + str(j)
-                            out_grp = type_grouped_grp.create_group(path)
+                            pg_grp = type_grouped_grp.create_group(path)
                             data[idx] = path
-                            pg.write(out_grp)
+                            pg.write(pg_grp)
                             j += 1
-                        out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=np.array(data))
+                        out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=data.astype('S'))
                     else:
                         out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=np.array(observable.data))
-                            
 
-
-                    # if observable.datum_type == "scalar":
-                    #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
-                    # elif observable.datum_type == "image":
-                    #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
-                    # elif observable.datum_type == "distribution":
-                    #     # print(np.shape(observable.datum))
-                    #     for j in range(np.shape(observable.datum)[0]):
-                    #         for k in range(np.shape(observable.datum)[1]):
-
-                    #             path = observable.datum_name + '_' + str(j) + '_' + str(k)
-                    #             out_grp = type_grouped_grp.create_group(path)
-                    #             # Store the path in an array for later reference
-                    #             if not hasattr(self, 'distribution_paths'):
-                    #                 distribution_paths = np.empty((np.shape(observable.datum)[0], np.shape(observable.datum)[1], 1, 1), dtype=object)
-                    #             distribution_paths[j, k, 0, 0] = path
-                    #             if isinstance(observable.datum[j,k,0,0], ParticleGroup):
-                    #                 # print(f"Writing distribution datum at {path}")
-                    #                 observable.datum[j,k,0,0].write(out_grp)
-                    #     # Save the paths as a dataset
-                    #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=distribution_paths)
-                    
-                    # out_grp = type_grouped_grp.create_group(output.datum_name)
+                    # Set attributes
                     location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
                     out_grp.attrs["location"] = location_value
-                    # out_grp.attrs["datum_type"] = observable.datum_type
                     out_grp.attrs["control"] = observable.control
-
 
                     if isinstance(observable.units, str):
                         out_grp.attrs["units"] = observable.units
@@ -1205,15 +1154,12 @@ class DataPoint2:
 
                     for k, v in observable.attrs.items():
                         out_grp.attrs[k] = v
-                    # Save datum
+
                 else:
-                    # print(output.location)
-                    # Create or get the group for this output location
-                    # print(observable.location)
-                    assert isinstance(observable.location, list) or isinstance(observable.location, np.ndarray), "observable.location must be a list or np array when location_primary is True, got {}".format(type(observable.location))
+                    assert isinstance(observable.location, (list, np.ndarray)), "observable.location must be a list or np array when location_primary is True, got {}".format(type(observable.location))
                     
                     assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True, got length {}".format(len(observable.location))
-                    # print(str(observable.location[0]))
+                    
                     if str(observable.location[0]) not in observables_grp:
                         out_grp = observables_grp.create_group(str(observable.location[0]))
                     else:
@@ -1225,51 +1171,20 @@ class DataPoint2:
                     for k, obs_name in enumerate(observable.data_names):
                         if has_particlegroup:
                             data = copy.deepcopy(observable.data)
-                            for idx in np.ndindex(data):
+                            for idx in np.ndindex(data.shape):
                                 pg = data[idx]
                                 path = obs_name + '_' + str(j)
-                                out_grp = type_grouped_grp.create_group(path)
+                                pg_grp = out_grp.create_group(path)
                                 data[idx] = path
-                                pg.write(out_grp)
+                                pg.write(pg_grp)
                                 j += 1
-                            out_grp = out_grp.create_dataset(obs_name, data=np.array(data))
+                            out_grp.create_dataset(obs_name, data=data.astype('S'))
                         else:
-                            out_grp = out_grp.create_dataset(obs_name, data=np.array(observable.data))
-
-                    # Save datum based on type
-                    # if observable.datum_type == "scalar":
-                    #     # print(str(output.location) + "/" + output.datum_name)
-                    #     data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
-                    #     # print(observable.datum_name)
-                    #     # print(observable.datum)
-                        
-                    # elif observable.datum_type == "image":
-                    #     data_ds = out_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
-                    # elif observable.datum_type == "distribution":
-                    #     # data_grp = out_grp.create_group(observable.datum_name)
-                    #     for j in range(np.shape(observable.datum)[0]):
-                            
-
-                    #             path = observable.datum_name + '_' + str(j) 
-                    #             data_grp = out_grp.create_group(path)
-                    #             # Store the path in an array for later reference
-                    #             if not hasattr(self, 'distribution_paths'):
-                    #                 distribution_paths = np.empty((1, np.shape(observable.datum)[0], 1, 1), dtype=object)
-                    #             distribution_paths[0,j,0, 0] = path
-                    #             if isinstance(observable.datum[0,j,0,0], ParticleGroup):
-                    #                 # print(f"Writing distribution datum at {path}")
-                    #                 observable.datum[0,j,0,0].write(data_grp)
-                    #             else:
-                    #                 print(f"Datum at {path} is not a ParticleGroup")
-                    #     # Save the paths as a dataset
-                    #     data_ds = out_grp.create_dataset(observable.datum_name, data=distribution_paths)
-                    # else:
-                    #     data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
+                            out_grp.create_dataset(obs_name, data=np.array(observable.data))
 
                     # Set attributes
                     location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
                     out_grp.attrs["location"] = location_value
-                    # out_grp.attrs["datum_type"] = observable.datum_type
                     out_grp.attrs["control"] = observable.control
                     if isinstance(observable.units, str):
                         out_grp.attrs["units"] = observable.units
@@ -1280,12 +1195,7 @@ class DataPoint2:
 
 
             if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
-                # sim_meta_grp = f.create_group("simulation_metadata")
-                # Save simulation_input_file as a dataset within the group
                 lattice_grp.create_dataset("simulation_input_file", data=np.bytes_(self.simulation_metadata.simulation_input_file))
-                
-                
-
 
             # Save ID and run_information
             f.attrs["ID"] = self.ID
@@ -1294,9 +1204,221 @@ class DataPoint2:
             f.attrs["run_information_notes"] = self.run_information.notes
             f.attrs["Data_Standard_Version"] = VERSION
             for key in self.summary.summary_keys:
-                # print(key)
                 f.attrs[key] = getattr(self.summary, "summary", {}).get(key, "")
             f.attrs["summary_location"] = self.summary.summary_location
+    # def saveHDF5(self, fileloc=None):
+    #     """
+    #     Saves the data point to HDF5 format.
+    #     Args:
+    #         fileloc (str): File location or directory to save the HDF5 file.
+    #     """
+    #     self.finalize()
+    #     # Save to HDF5
+    #     # If fileloc is a directory, append filename
+    #     if fileloc is None:
+    #         filename = f"{self.ID}.h5"
+    #     elif os.path.isdir(fileloc):
+    #         filename = os.path.join(fileloc, f"{self.ID}.h5")
+    #     else:
+    #         filename = fileloc
+    #     # Note: self.inputs, self.lattice, self.outputs, self.summary, self.ID, self.run_information
+    #     with h5py.File(filename, "w") as f:
+    #         # Save inputs
+    #         # inputs_grp = f.create_group("inputs")
+    #         # Scalar inputs
+    #         # for name, single_input in self.inputs.scalar_inputs.items():
+    #         #     input_grp = inputs_grp.create_dataset(name,data=single_input.value)
+    #         #     input_grp.attrs["name"] = single_input.name
+    #         #     input_grp.attrs["location"] = single_input.location
+    #         #     if isinstance(single_input.units, str):
+    #         #         input_grp.attrs["units"] = single_input.units
+    #         #     else:
+    #         #         input_grp.attrs["units"] = getattr(single_input.units, "unitSymbol", str(single_input.units))
+    #         #     input_grp.attrs["description"] = single_input.description
+    #         #     input_grp.attrs["datum_type"] = "scalar"
+    #         # # Input distribution
+    #         # if isinstance(self.inputs.input_distribution, np.ndarray):
+    #         #     inputs_grp.create_dataset("input_distribution", data=self.inputs.input_distribution)
+    #         #     dist_type = "image"
+    #         # elif isinstance(self.inputs.input_distribution, ParticleGroup):
+    #         #     self.inputs.input_distribution.write(inputs_grp.create_group("input_distribution"))
+    #         #     dist_type = "ParticleGroup"
+    #         # # Input distribution attrs
+    #         # if hasattr(self.inputs, "input_distribution_attrs") and self.inputs.input_distribution_attrs:
+    #         #     for k, v in self.inputs.input_distribution_attrs.items():
+    #         #         inputs_grp["input_distribution"].attrs[k] = v
+    #         #     inputs_grp["input_distribution"].attrs["datum_type"] = dist_type
+
+    #         # Save lattice
+    #         lattice_grp = f.create_group("lattice")
+    #         lattice_grp.create_dataset("lattice_location", data=self.lattice.lattice_location)
+    #         if isinstance(self.lattice.lattice_files, dict):
+    #             lattice_files_grp = lattice_grp.create_group("lattice_files")
+    #             for fname, contents in self.lattice.lattice_files.items():
+    #                 lattice_files_grp.create_dataset(fname, data=np.bytes_(contents))
+    #         # Save PV_table as attributes in lattice_grp if it exists and is a dict
+    #         if hasattr(self.lattice, "PV_table") and isinstance(self.lattice.PV_table, dict):
+    #             for k, v in self.lattice.PV_table.items():
+    #                 lattice_grp.attrs[k] = v
+
+    #         # Save observables
+    #         observables_grp = f.create_group("observables")
+    #         j = 0
+    #         for i, observable in enumerate(self.observables):
+
+    #             if observable.location_primary == False:
+    #                 # Create or get the "Type_Grouped_Data" group
+    #                 if "Type_Grouped_Data" not in observables_grp:
+    #                     type_grouped_grp = observables_grp.create_group("Type_Grouped_Data")
+    #                 else:
+    #                     type_grouped_grp = observables_grp["Type_Grouped_Data"]
+    #                 assert len(observable.data_names) == 1, "observable.data_names must have length 1 when location_primary is False"
+
+    #                 flat_data = observable.data.flatten()
+    #                 has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
+                    
+    #                 if has_particlegroup:
+    #                     data = copy.deepcopy(observable.data)
+    #                     for idx in np.ndindex(data):
+    #                         pg = data[idx]
+    #                         path = observable.data_names[0] + '_' + str(j)
+    #                         out_grp = type_grouped_grp.create_group(path)
+    #                         data[idx] = path
+    #                         pg.write(out_grp)
+    #                         j += 1
+    #                     out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=np.array(data))
+    #                 else:
+    #                     out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=np.array(observable.data))
+                            
+
+
+    #                 # if observable.datum_type == "scalar":
+    #                 #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
+    #                 # elif observable.datum_type == "image":
+    #                 #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
+    #                 # elif observable.datum_type == "distribution":
+    #                 #     # print(np.shape(observable.datum))
+    #                 #     for j in range(np.shape(observable.datum)[0]):
+    #                 #         for k in range(np.shape(observable.datum)[1]):
+
+    #                 #             path = observable.datum_name + '_' + str(j) + '_' + str(k)
+    #                 #             out_grp = type_grouped_grp.create_group(path)
+    #                 #             # Store the path in an array for later reference
+    #                 #             if not hasattr(self, 'distribution_paths'):
+    #                 #                 distribution_paths = np.empty((np.shape(observable.datum)[0], np.shape(observable.datum)[1], 1, 1), dtype=object)
+    #                 #             distribution_paths[j, k, 0, 0] = path
+    #                 #             if isinstance(observable.datum[j,k,0,0], ParticleGroup):
+    #                 #                 # print(f"Writing distribution datum at {path}")
+    #                 #                 observable.datum[j,k,0,0].write(out_grp)
+    #                 #     # Save the paths as a dataset
+    #                 #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=distribution_paths)
+                    
+    #                 # out_grp = type_grouped_grp.create_group(output.datum_name)
+    #                 location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
+    #                 out_grp.attrs["location"] = location_value
+    #                 # out_grp.attrs["datum_type"] = observable.datum_type
+    #                 out_grp.attrs["control"] = observable.control
+
+
+    #                 if isinstance(observable.units, str):
+    #                     out_grp.attrs["units"] = observable.units
+    #                 else:
+    #                     out_grp.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
+
+    #                 for k, v in observable.attrs.items():
+    #                     out_grp.attrs[k] = v
+    #                 # Save datum
+    #             else:
+    #                 # print(output.location)
+    #                 # Create or get the group for this output location
+    #                 # print(observable.location)
+    #                 assert isinstance(observable.location, list) or isinstance(observable.location, np.ndarray), "observable.location must be a list or np array when location_primary is True, got {}".format(type(observable.location))
+                    
+    #                 assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True, got length {}".format(len(observable.location))
+    #                 # print(str(observable.location[0]))
+    #                 if str(observable.location[0]) not in observables_grp:
+    #                     out_grp = observables_grp.create_group(str(observable.location[0]))
+    #                 else:
+    #                     out_grp = observables_grp[str(observable.location[0])]
+
+    #                 flat_data = observable.data.flatten()
+    #                 has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
+                    
+    #                 for k, obs_name in enumerate(observable.data_names):
+    #                     if has_particlegroup:
+    #                         data = copy.deepcopy(observable.data)
+    #                         for idx in np.ndindex(data):
+    #                             pg = data[idx]
+    #                             path = obs_name + '_' + str(j)
+    #                             out_grp = type_grouped_grp.create_group(path)
+    #                             data[idx] = path
+    #                             pg.write(out_grp)
+    #                             j += 1
+    #                         out_grp = out_grp.create_dataset(obs_name, data=np.array(data))
+    #                     else:
+    #                         out_grp = out_grp.create_dataset(obs_name, data=np.array(observable.data))
+
+    #                 # Save datum based on type
+    #                 # if observable.datum_type == "scalar":
+    #                 #     # print(str(output.location) + "/" + output.datum_name)
+    #                 #     data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
+    #                 #     # print(observable.datum_name)
+    #                 #     # print(observable.datum)
+                        
+    #                 # elif observable.datum_type == "image":
+    #                 #     data_ds = out_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
+    #                 # elif observable.datum_type == "distribution":
+    #                 #     # data_grp = out_grp.create_group(observable.datum_name)
+    #                 #     for j in range(np.shape(observable.datum)[0]):
+                            
+
+    #                 #             path = observable.datum_name + '_' + str(j) 
+    #                 #             data_grp = out_grp.create_group(path)
+    #                 #             # Store the path in an array for later reference
+    #                 #             if not hasattr(self, 'distribution_paths'):
+    #                 #                 distribution_paths = np.empty((1, np.shape(observable.datum)[0], 1, 1), dtype=object)
+    #                 #             distribution_paths[0,j,0, 0] = path
+    #                 #             if isinstance(observable.datum[0,j,0,0], ParticleGroup):
+    #                 #                 # print(f"Writing distribution datum at {path}")
+    #                 #                 observable.datum[0,j,0,0].write(data_grp)
+    #                 #             else:
+    #                 #                 print(f"Datum at {path} is not a ParticleGroup")
+    #                 #     # Save the paths as a dataset
+    #                 #     data_ds = out_grp.create_dataset(observable.datum_name, data=distribution_paths)
+    #                 # else:
+    #                 #     data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
+
+    #                 # Set attributes
+    #                 location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
+    #                 out_grp.attrs["location"] = location_value
+    #                 # out_grp.attrs["datum_type"] = observable.datum_type
+    #                 out_grp.attrs["control"] = observable.control
+    #                 if isinstance(observable.units, str):
+    #                     out_grp.attrs["units"] = observable.units
+    #                 else:
+    #                     out_grp.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
+    #                 for k, v in observable.attrs.items():
+    #                     out_grp.attrs[k] = v
+
+
+    #         if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
+    #             # sim_meta_grp = f.create_group("simulation_metadata")
+    #             # Save simulation_input_file as a dataset within the group
+    #             lattice_grp.create_dataset("simulation_input_file", data=np.bytes_(self.simulation_metadata.simulation_input_file))
+                
+                
+
+
+    #         # Save ID and run_information
+    #         f.attrs["ID"] = self.ID
+    #         f.attrs["run_information_source"] = self.run_information.source
+    #         f.attrs["run_information_date"] = self.run_information.date
+    #         f.attrs["run_information_notes"] = self.run_information.notes
+    #         f.attrs["Data_Standard_Version"] = VERSION
+    #         for key in self.summary.summary_keys:
+    #             # print(key)
+    #             f.attrs[key] = getattr(self.summary, "summary", {}).get(key, "")
+    #         f.attrs["summary_location"] = self.summary.summary_location
 
 """
 Stores simulation metadata for the data standard.

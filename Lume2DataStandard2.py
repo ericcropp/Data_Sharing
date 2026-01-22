@@ -68,19 +68,10 @@ output_unit_list = {
     'sigma_z': 'm',
     't': 's'
 }
-# Loop over all simulation archives listed in Impact_Filenames.yaml
-for i in range(len(impact_filenames['impact_archive'])):
 
-    # Load simulation archive
-    I = impact.Impact()
-    I.load_archive(impact_filenames['impact_archive'][i])
-
-    # Load template YAML for comparison
-    I_orig = impact.Impact.from_yaml('Lattice_Files/ImpactT.yaml')
-
+def lattice_comparison(lattice_I_dict, lattice_I_orig_dict, I, I_orig):
     # Compare lattice elements to original lattice -- we will save original lattice, so only need to store changes.
-    lattice_I_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I.input['lattice'])}
-    lattice_I_orig_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I_orig.input['lattice'])}
+    
     all_names = set(lattice_I_dict.keys()).union(lattice_I_orig_dict.keys())
 
     diff_dict = {}
@@ -147,7 +138,9 @@ for i in range(len(impact_filenames['impact_archive'])):
             diff_dict[f"header:{key}:I"] = header_I[key]
             data_dict[f"header:{key}"] = header_I[key]
             diff_dict[f"header:{key}:I_ORIG"] = header_I_orig[key]
+    return diff_dict, data_dict
 
+def extract_run_info(I):
     # Extract and format run information
     start_time = I.output['run_info'].get('start_time')
     if start_time:
@@ -168,14 +161,18 @@ for i in range(len(impact_filenames['impact_archive'])):
         "date": date_str
     }
     run_info.update(I.output.get('run_info', {}))
+    return run_info
 
+def extract_input_file_contents(I):
     # Write Impact input file and reload to save to object
     I.write_input(input_filename='Temp.in',path='Lattice_Files/')
     with open('Lattice_Files/Temp.in', 'r') as f_input:
         input_contents = f_input.read()
+    return input_contents
 
+def load_lattice_file_contents(lattice_path):
     # Read lattice and template files
-    with open('Lattice_Files/rfdata4', 'r') as f4, open('Lattice_Files/rfdata5', 'r') as f5, open('Lattice_Files/rfdata6', 'r') as f6, open('Lattice_Files/rfdata7', 'r') as f7, open('Lattice_Files/rfdata201', 'r') as f201, open('Lattice_Files/rfdata102', 'r') as f102, open('Lattice_Files/ImpactT.yaml', 'r') as f_yaml, open('Lattice_Files/ImpactT_template.in', 'r') as f_template:
+    with open(f'{lattice_path}/rfdata4', 'r') as f4, open(f'{lattice_path}/rfdata5', 'r') as f5, open(f'{lattice_path}/rfdata6', 'r') as f6, open(f'{lattice_path}/rfdata7', 'r') as f7, open(f'{lattice_path}/rfdata201', 'r') as f201, open(f'{lattice_path}/rfdata102', 'r') as f102, open(f'{lattice_path}/ImpactT.yaml', 'r') as f_yaml, open(f'{lattice_path}/ImpactT_template.in', 'r') as f_template:
         rfdata4_contents = f4.read()
         rfdata5_contents = f5.read()
         rfdata6_contents = f6.read()
@@ -184,11 +181,65 @@ for i in range(len(impact_filenames['impact_archive'])):
         rfdata102_contents = f102.read()
         impact_yaml_contents = f_yaml.read()
         impact_template_contents = f_template.read()
-    # Prepare summary keys for this simulation
+    return (rfdata4_contents, rfdata5_contents, rfdata6_contents, rfdata7_contents, rfdata201_contents, rfdata102_contents, impact_yaml_contents, impact_template_contents)
+def add_datapoints(batch_dim, I, data_dict,run_info,input_contents, rfdata_contents, output_unit_list, unit_list):
+    D = SimulatedDataPoint2()
+    
+    # Add initial particles - create 1D object array with one element
+    initial_particles_data = np.empty(1, dtype=object)
+    initial_particles_data[0] = I.particles['initial_particles']
+    D.add_observable(batch_dims=batch_dim, feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_names='VCC', units='m', location_primary=True,control=True)
+    
+    # Add all screen images
+    for key, value in I.output['particles'].items():
+        if key != 'final_particles' and key != 'initial_particles':
+            particle_data = np.empty(1, dtype=object)
+            particle_data[0] = value
+            D.add_observable(batch_dims=batch_dim, feature_dims=0, location=key, data=particle_data, attrs={}, data_names=key, units='m', location_primary=True,control=False)
+    
+    # Add final particles - create 1D object array with one element
+    final_particles_data = np.empty(1, dtype=object)
+    final_particles_data[0] = I.particles['final_particles']
+    D.add_observable(batch_dims=batch_dim, feature_dims=0, location='final_particles', data=final_particles_data, attrs={}, data_names='final_particles', units='m', location_primary=False,control=False)
+    # Add lattice files
+    D.add_lattice(lattice_location='included', lattice_files={
+        'rfdata4': rfdata_contents[0],
+        'rfdata5': rfdata_contents[1],
+        'rfdata6': rfdata_contents[2],      
+        'rfdata7': rfdata_contents[3],
+        'rfdata201': rfdata_contents[4],
+        'rfdata102': rfdata_contents[5],
+        'impactT.yaml': rfdata_contents[6],
+        'impactT_template.in': rfdata_contents[7],
+    })
+    # Add summary information
     summary_keys = list(data_dict.keys())
     if 'norm_emit_x' in I.output['stats']:
         summary_keys.append('norm_emit_x')
-    D = SimulatedDataPoint2()
+    D.add_summary(
+        summary_keys=summary_keys,
+        summary_location='final')
+    # Add run information
+    D.add_run_information(source=run_info['source'], date=run_info['date'], notes=run_info['notes'])
+    # Add simulation metadata
+    D.add_simulation_data(
+        simulation_start=I.particles['initial_particles']['mean_z'],
+        simulation_end=I.particles['final_particles']['mean_z'],
+        simulation_code='Impact',
+        simulation_input_file=input_contents,
+        simulation_version=SIMULATION_VERSION
+        )
+    
+    # Add simulation outputs
+    for key, value in I.output['stats'].items():
+        if key != 'mean_z':
+            # Reshape to 2D: (1 shot, num_locations)
+            stat_data = np.array(I.output['stats'][key]).reshape(1, -1)
+            
+            if key in output_unit_list:
+                D.add_observable(batch_dims=batch_dim, feature_dims=0, location=I.output['stats']['mean_z'].tolist(), data=stat_data, attrs={}, data_names=key, units=output_unit_list[key], location_primary=False,control=[False]*len(I.output['stats']['mean_z'].tolist()))
+            else:
+                D.add_observable(batch_dims=batch_dim, feature_dims=0, location=I.output['stats']['mean_z'].tolist(), data=stat_data, attrs={}, data_names=key, units="unitless", location_primary=False,control=[False]*len(I.output['stats']['mean_z'].tolist()))
 
     # Add scalar inputs to the data point
     scalar_inputs = {}
@@ -208,81 +259,145 @@ for i in range(len(impact_filenames['impact_archive'])):
             "units": units,
             "description": ""   # Fill in description if available
         }
-        datum = np.empty((1, 1, 1, 1))
-        datum[0, 0, 0, 0] = data_dict[col]
-        loc = col.split('_')[0].split('_')[0].split(':')[0]
-        # print(col,loc)
-        D.add_observable(location=loc, control=[True], num_shots=1, datum=datum, attrs={}, datum_name=col, datum_type='scalar', location_primary=True)
-    # D.add_inputs(scalar_inputs=scalar_inputs)
-    # Add input distribution (initial particles)
-    input_dist = I.particles['initial_particles']
-    if isinstance(input_dist, list):
-        input_dist = input_dist[0]
-    # D.add_inputs(input_distribution=input_dist, input_distribution_attrs={})
-
-    datum = np.empty((1, 1, 1, 1), dtype=object)
-    datum[0, 0, 0, 0] = I.particles['initial_particles']
-    D.add_observable(location=0, control=[False], num_shots=1, datum=datum, attrs={}, datum_name='initial_particles', datum_type='distribution', location_primary=True)
-
-    # Add lattice files to the data point
-    D.add_lattice(lattice_location='included', lattice_files={
-        'rfdata4': rfdata4_contents,
-        'rfdata5': rfdata5_contents,
-        'rfdata6': rfdata6_contents,
-        'rfdata7': rfdata7_contents,
-        'rfdata201': rfdata201_contents,
-        'rfdata102': rfdata102_contents,
-        'impactT.yaml': impact_yaml_contents,
-        'impactT_template.in': impact_template_contents,
-    })
-    # Add summary information
-    D.add_summary(
-        summary_keys=summary_keys,
-        summary_location='final')
-    # Add run information
-    D.add_run_information(source=run_info['source'], date=run_info['date'], notes=run_info['notes'])
-    # Add simulation metadata
-    D.add_simulation_data(
-        simulation_start=I.particles['initial_particles']['mean_z'],
-        simulation_end=I.particles['final_particles']['mean_z'],
-        simulation_code='Impact',
-        simulation_input_file=input_contents,
-        simulation_version=SIMULATION_VERSION
-        )
-
-    # Add scalar outputs from stats
-    for key, value in I.output['stats'].items():
-        value = np.array([[ [value] ]], dtype=float)
-        value = value.reshape(-1, 1, 1, 1)
-        if key != 'mean_z':
-            if key in output_unit_list:
-                D.add_observable(location=I.output['stats']['mean_z'].tolist(), control=[False]*len(I.output['stats']['mean_z'].tolist()), num_shots=1,datum=value, attrs={}, units=output_unit_list[key], datum_name=key, datum_type='scalar',location_primary=False)
-            else:
-                D.add_observable(location=I.output['stats']['mean_z'].tolist(), control=[False]*len(I.output['stats']['mean_z'].tolist()), num_shots=1, datum=value, attrs={}, units='unitless', datum_name=key, datum_type='scalar',location_primary=False)
-    # Add distribution outputs from particles
-    for key, value in I.output['particles'].items():
-        if isinstance(value, ParticleGroup):
-            datum = np.empty((1, 1, 1, 1), dtype=object)
-            datum[0, 0, 0, 0] = value 
-        if key != 'final_particles' and key != 'initial_particles':
-            # D.add_observable(location=unit_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
-
-    # Add image output (profile camera)
-            D.add_observable(location=key, control=[False], datum=datum, num_shots=1, attrs={}, datum_name=key, datum_type='distribution', location_primary=True)
-    # Add final_particles as a distribution output
-    datum = np.empty((1, 1, 1, 1), dtype=object)
-    datum[0, 0, 0, 0] = I.particles['final_particles'] 
-    D.add_observable(location=I.particles['final_particles']['mean_z'], control=[False], num_shots=1, datum=datum, attrs={}, datum_name='final_particles', datum_type='distribution', location_primary=False)
-    # Ensure output directory exists for HDF5 files
+        # Wrap scalar value in 1D array
+        scalar_data = np.array([data_dict[col]], dtype=np.float64)
+        
+        D.add_observable(batch_dims=batch_dim, feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, attrs={'Description': scalar_inputs[col]['description']}, data_names=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True,control=True)
+        
+        # Remove duplicate add_observable call below
+        # datum = np.empty((1, 1, 1, 1))
+        # datum[0, 0, 0, 0] = data_dict[col]
+        # loc = col.split('_')[0].split('_')[0].split(':')[0]
+        # D.add_observable(location=loc, control=[True], num_shots=1, datum=datum, attrs={}, datum_name=col, datum_type='scalar', location_primary=True)
+        
     os.makedirs('./Test_Sim_Data2/', exist_ok=True)
     # Save the data point to HDF5
     D.saveHDF5('./Test_Sim_Data2/')
-    # Add summary entry for this simulation
-    entry = {
-        **D.summary.summary
-    }
-    summary_table.append(entry)
+    return D
 
-# Write the summary table to a YAML file
-with open('./Test_Sim_Data2/summary_table.yaml', 'w') as f:
-    yaml.dump(summary_table, f)
+
+# Loop over all simulation archives listed in Impact_Filenames.yaml
+for i in range(len(impact_filenames['impact_archive'])):
+
+    # Load simulation archive
+    I = impact.Impact()
+    I.load_archive(impact_filenames['impact_archive'][i])
+
+    # Load template YAML for comparison
+    I_orig = impact.Impact.from_yaml('Lattice_Files/ImpactT.yaml')
+
+    lattice_I_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I.input['lattice'])}
+    lattice_I_orig_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I_orig.input['lattice'])}
+
+    diff_dict, data_dict = lattice_comparison(lattice_I_dict, lattice_I_orig_dict, I, I_orig)
+    
+    run_info = extract_run_info(I)
+
+    input_contents = extract_input_file_contents(I)
+
+    rfdata_contents = load_lattice_file_contents('Lattice_Files')
+
+    add_datapoints(batch_dim=0, I=I, data_dict=data_dict, run_info=run_info, input_contents=input_contents, rfdata_contents=rfdata_contents, output_unit_list=output_unit_list, unit_list=unit_list)
+
+    # # Prepare summary keys for this simulation
+    # summary_keys = list(data_dict.keys())
+    # if 'norm_emit_x' in I.output['stats']:
+    #     summary_keys.append('norm_emit_x')
+    # D = SimulatedDataPoint2()
+
+    # # Add scalar inputs to the data point
+    # scalar_inputs = {}
+    # for col in data_dict:
+    #     # Determine units based on suffix match with unit_list keys
+    #     units = ""
+    #     for key, val in unit_list.items():
+    #         if col.endswith(key):
+    #             units = val
+    #             break
+    #     if not units:  # If still None or blank, set default
+    #         units = "unitless"
+    #     scalar_inputs[col] = {
+    #         "name": col,
+    #         "value": data_dict[col],
+    #         "location": col,
+    #         "units": units,
+    #         "description": ""   # Fill in description if available
+    #     }
+    #     datum = np.empty((1, 1, 1, 1))
+    #     datum[0, 0, 0, 0] = data_dict[col]
+    #     loc = col.split('_')[0].split('_')[0].split(':')[0]
+    #     # print(col,loc)
+    #     D.add_observable(location=loc, control=[True], num_shots=1, datum=datum, attrs={}, datum_name=col, datum_type='scalar', location_primary=True)
+    # # D.add_inputs(scalar_inputs=scalar_inputs)
+    # # Add input distribution (initial particles)
+    # input_dist = I.particles['initial_particles']
+    # if isinstance(input_dist, list):
+    #     input_dist = input_dist[0]
+    # # D.add_inputs(input_distribution=input_dist, input_distribution_attrs={})
+
+    # datum = np.empty((1, 1, 1, 1), dtype=object)
+    # datum[0, 0, 0, 0] = I.particles['initial_particles']
+    # D.add_observable(location=0, control=[False], num_shots=1, datum=datum, attrs={}, datum_name='initial_particles', datum_type='distribution', location_primary=True)
+
+    # # Add lattice files to the data point
+    # D.add_lattice(lattice_location='included', lattice_files={
+    #     'rfdata4': rfdata_contents[0],
+    #     'rfdata5': rfdata_contents[1],
+    #     'rfdata6': rfdata_contents[2],
+    #     'rfdata7': rfdata_contents[3],
+    #     'rfdata201': rfdata_contents[4],
+    #     'rfdata102': rfdata_contents[5],
+    #     'impactT.yaml': rfdata_contents[6],
+    #     'impactT_template.in': rfdata_contents[7],
+    # })
+    # # Add summary information
+    # D.add_summary(
+    #     summary_keys=summary_keys,
+    #     summary_location='final')
+    # # Add run information
+    # D.add_run_information(source=run_info['source'], date=run_info['date'], notes=run_info['notes'])
+    # # Add simulation metadata
+    # D.add_simulation_data(
+    #     simulation_start=I.particles['initial_particles']['mean_z'],
+    #     simulation_end=I.particles['final_particles']['mean_z'],
+    #     simulation_code='Impact',
+    #     simulation_input_file=input_contents,
+    #     simulation_version=SIMULATION_VERSION
+    #     )
+
+#     # Add scalar outputs from stats
+#     for key, value in I.output['stats'].items():
+#         value = np.array([[ [value] ]], dtype=float)
+#         value = value.reshape(-1, 1, 1, 1)
+#         if key != 'mean_z':
+#             if key in output_unit_list:
+#                 D.add_observable(location=I.output['stats']['mean_z'].tolist(), control=[False]*len(I.output['stats']['mean_z'].tolist()), num_shots=1,datum=value, attrs={}, units=output_unit_list[key], datum_name=key, datum_type='scalar',location_primary=False)
+#             else:
+#                 D.add_observable(location=I.output['stats']['mean_z'].tolist(), control=[False]*len(I.output['stats']['mean_z'].tolist()), num_shots=1, datum=value, attrs={}, units='unitless', datum_name=key, datum_type='scalar',location_primary=False)
+#     # Add distribution outputs from particles
+#     for key, value in I.output['particles'].items():
+#         if isinstance(value, ParticleGroup):
+#             datum = np.empty((1, 1, 1, 1), dtype=object)
+#             datum[0, 0, 0, 0] = value 
+#         if key != 'final_particles' and key != 'initial_particles':
+#             # D.add_observable(location=unit_prefixes, control=control, datum=data, num_shots=1,attrs={},units=unit, datum_name=unique_suffix, datum_type='scalar',location_primary=True)
+
+#     # Add image output (profile camera)
+#             D.add_observable(location=key, control=[False], datum=datum, num_shots=1, attrs={}, datum_name=key, datum_type='distribution', location_primary=True)
+#     # Add final_particles as a distribution output
+#     datum = np.empty((1, 1, 1, 1), dtype=object)
+#     datum[0, 0, 0, 0] = I.particles['final_particles'] 
+#     D.add_observable(location=I.particles['final_particles']['mean_z'], control=[False], num_shots=1, datum=datum, attrs={}, datum_name='final_particles', datum_type='distribution', location_primary=False)
+#     # Ensure output directory exists for HDF5 files
+#     os.makedirs('./Test_Sim_Data2/', exist_ok=True)
+#     # Save the data point to HDF5
+#     D.saveHDF5('./Test_Sim_Data2/')
+#     # Add summary entry for this simulation
+#     entry = {
+#         **D.summary.summary
+#     }
+#     summary_table.append(entry)
+
+# # Write the summary table to a YAML file
+# with open('./Test_Sim_Data2/summary_table.yaml', 'w') as f:
+#     yaml.dump(summary_table, f)
