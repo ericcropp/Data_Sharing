@@ -270,7 +270,7 @@ class SingleObservable:
             if has_particlegroup:
             # If any element is a ParticleGroup, all must be ParticleGroup
                 if not all(isinstance(item, ParticleGroup) for item in flat_data):
-                    raise TypeError("If any element of data is a ParticleGroup, all elements must be ParticleGroup")
+                    raise TypeError(f"If any element of data is a ParticleGroup, all elements must be ParticleGroup, got {[type(item) for item in flat_data]}")
                 
                 # If all are ParticleGroup, set feature_dims to 0
                 feature_dims = 0
@@ -306,6 +306,8 @@ class SingleObservable:
 
     def data_dim_checker(self):
         # Check number of dimensions in data
+        # print(self.location)
+        # print(self.data_names)
         if len(self.location) == 1:
             len_dim = 0
         elif len(self.location) > 1:
@@ -317,7 +319,7 @@ class SingleObservable:
         num_dimensions = self.batch_dims + self.feature_dims + self.shots_per_batch + len_dim + names_dim + 1 # Shots dimension
         
         if len(np.shape(self.data)) != num_dimensions:
-            raise ValueError(f"data must have {num_dimensions} dimensions based on provided batch_dims, feature_dims, shots_per_batch, location, and data_names, but got {len(np.shape(self.data))} dimensions")
+            raise ValueError(f"data must have {num_dimensions} dimensions based on provided batch_dims {self.batch_dims}, feature_dims {self.feature_dims}, shots_per_batch {self.shots_per_batch}, location {len_dim}, and data_names {names_dim}, but got {len(np.shape(self.data))} dimensions")
             
     def to_dict(self):
         """

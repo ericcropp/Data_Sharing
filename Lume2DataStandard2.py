@@ -182,25 +182,31 @@ def load_lattice_file_contents(lattice_path):
         impact_yaml_contents = f_yaml.read()
         impact_template_contents = f_template.read()
     return (rfdata4_contents, rfdata5_contents, rfdata6_contents, rfdata7_contents, rfdata201_contents, rfdata102_contents, impact_yaml_contents, impact_template_contents)
-def add_datapoints(batch_dim, I, data_dict,run_info,input_contents, rfdata_contents, output_unit_list, unit_list):
+
+def add_datapoints(batch_dim, I_list, data_dicts,run_info,input_contents, rfdata_contents, output_unit_list, unit_list):
     D = SimulatedDataPoint2()
-    
+    num_pts = len(I_list)
     # Add initial particles - create 1D object array with one element
-    initial_particles_data = np.empty(1, dtype=object)
-    initial_particles_data[0] = I.particles['initial_particles']
-    D.add_observable(batch_dims=batch_dim, feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_names='VCC', units='m', location_primary=True,control=True)
+    initial_particles_data = np.empty(num_pts, dtype=object)
+    for i in range(len(I_list)):
+        initial_particles_data[i] = I_list[i].particles['initial_particles']
+    D.add_observable(batch_dims=batch_dim, feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_names='VCC', units='m', location_primary=True,control=[True]*num_pts)
     
     # Add all screen images
-    for key, value in I.output['particles'].items():
+    
+    for key, value in I_list[0].output['particles'].items():
         if key != 'final_particles' and key != 'initial_particles':
-            particle_data = np.empty(1, dtype=object)
-            particle_data[0] = value
-            D.add_observable(batch_dims=batch_dim, feature_dims=0, location=key, data=particle_data, attrs={}, data_names=key, units='m', location_primary=True,control=False)
+            particle_data = np.empty(num_pts, dtype=object)
+            for i in range(len(I_list)):
+                
+                particle_data[i] = I_list[i].output['particles'][key]
+            D.add_observable(batch_dims=batch_dim, feature_dims=0, location=key, data=particle_data, attrs={}, data_names=key, units='m', location_primary=True,control=[False]*num_pts)
     
     # Add final particles - create 1D object array with one element
-    final_particles_data = np.empty(1, dtype=object)
-    final_particles_data[0] = I.particles['final_particles']
-    D.add_observable(batch_dims=batch_dim, feature_dims=0, location='final_particles', data=final_particles_data, attrs={}, data_names='final_particles', units='m', location_primary=False,control=False)
+    final_particles_data = np.empty(num_pts, dtype=object)
+    for i in range(len(I_list)):
+        final_particles_data[i] = I_list[i].particles['final_particles']
+    D.add_observable(batch_dims=batch_dim, feature_dims=0, location='final_particles', data=final_particles_data, attrs={}, data_names='final_particles', units='m', location_primary=False,control=[False]*num_pts)
     # Add lattice files
     D.add_lattice(lattice_location='included', lattice_files={
         'rfdata4': rfdata_contents[0],
@@ -213,8 +219,8 @@ def add_datapoints(batch_dim, I, data_dict,run_info,input_contents, rfdata_conte
         'impactT_template.in': rfdata_contents[7],
     })
     # Add summary information
-    summary_keys = list(data_dict.keys())
-    if 'norm_emit_x' in I.output['stats']:
+    summary_keys = list(data_dicts[0].keys())
+    if 'norm_emit_x' in I_list[0].output['stats']:
         summary_keys.append('norm_emit_x')
     D.add_summary(
         summary_keys=summary_keys,
@@ -223,27 +229,47 @@ def add_datapoints(batch_dim, I, data_dict,run_info,input_contents, rfdata_conte
     D.add_run_information(source=run_info['source'], date=run_info['date'], notes=run_info['notes'])
     # Add simulation metadata
     D.add_simulation_data(
-        simulation_start=I.particles['initial_particles']['mean_z'],
-        simulation_end=I.particles['final_particles']['mean_z'],
+        simulation_start=I_list[0].particles['initial_particles']['mean_z'],
+        simulation_end=I_list[0].particles['final_particles']['mean_z'],
         simulation_code='Impact',
         simulation_input_file=input_contents,
         simulation_version=SIMULATION_VERSION
         )
     
-    # Add simulation outputs
-    for key, value in I.output['stats'].items():
+        # Add simulation outputs
+    first_locations = None
+    for key, value in I_list[0].output['stats'].items():
         if key != 'mean_z':
-            # Reshape to 2D: (1 shot, num_locations)
-            stat_data = np.array(I.output['stats'][key]).reshape(1, -1)
+            # Reshape to 2D: (num_pts, num_locations)
+            stat_data = np.empty((num_pts, len(I_list[0].output['stats'][key])))
+            for i in range(len(I_list)):
+                stat_data[i,:] = np.array(I_list[i].output['stats'][key]).reshape(1, -1)
             
-            if key in output_unit_list:
-                D.add_observable(batch_dims=batch_dim, feature_dims=0, location=I.output['stats']['mean_z'].tolist(), data=stat_data, attrs={}, data_names=key, units=output_unit_list[key], location_primary=False,control=[False]*len(I.output['stats']['mean_z'].tolist()))
-            else:
-                D.add_observable(batch_dims=batch_dim, feature_dims=0, location=I.output['stats']['mean_z'].tolist(), data=stat_data, attrs={}, data_names=key, units="unitless", location_primary=False,control=[False]*len(I.output['stats']['mean_z'].tolist()))
+                # Assert that location data is the same for every point in the batch
+                if first_locations is None:
+                    first_locations = I_list[i].output['stats']['mean_z'].tolist()
+                else:
+                    assert I_list[i].output['stats']['mean_z'].tolist() == first_locations, \
+                        f"Location data mismatch at point {i}: expected {first_locations}, got {I_list[i].output['stats']['mean_z'].tolist()}"
 
+            if key in output_unit_list:
+                D.add_observable(batch_dims=batch_dim, feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_names=key, units=output_unit_list[key], location_primary=False,control=[False]*len(first_locations))
+            else:
+                D.add_observable(batch_dims=batch_dim, feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_names=key, units="unitless", location_primary=False,control=[False]*len(first_locations))
+    # Assert all data_dicts have the same keys
+    if len(data_dicts) > 1:
+        first_keys = set(data_dicts[0].keys())
+        for idx, data_dict in enumerate(data_dicts[1:], start=1):
+            assert set(data_dict.keys()) == first_keys, \
+                f"data_dicts[{idx}] has different keys than data_dicts[0]"
+
+    # Combine each key into a master dict with 1-D np arrays
+    master_dict = {}
+    for key in data_dicts[0].keys():
+        master_dict[key] = np.array([data_dict[key] for data_dict in data_dicts])
     # Add scalar inputs to the data point
     scalar_inputs = {}
-    for col in data_dict:
+    for col in master_dict:
         # Determine units based on suffix match with unit_list keys
         units = ""
         for key, val in unit_list.items():
@@ -254,15 +280,17 @@ def add_datapoints(batch_dim, I, data_dict,run_info,input_contents, rfdata_conte
             units = "unitless"
         scalar_inputs[col] = {
             "name": col,
-            "value": data_dict[col],
+            "value": master_dict[col],
             "location": col,
             "units": units,
             "description": ""   # Fill in description if available
         }
         # Wrap scalar value in 1D array
-        scalar_data = np.array([data_dict[col]], dtype=np.float64)
+        scalar_data = master_dict[col]
         
-        D.add_observable(batch_dims=batch_dim, feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, attrs={'Description': scalar_inputs[col]['description']}, data_names=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True,control=True)
+        # print(col,np.shape(scalar_data))
+        # print(scalar_data)
+        D.add_observable(batch_dims=batch_dim, feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, attrs={'Description': scalar_inputs[col]['description']}, data_names=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True,control=[True]*num_pts)
         
         # Remove duplicate add_observable call below
         # datum = np.empty((1, 1, 1, 1))
@@ -277,7 +305,7 @@ def add_datapoints(batch_dim, I, data_dict,run_info,input_contents, rfdata_conte
 
 
 # Loop over all simulation archives listed in Impact_Filenames.yaml
-for i in range(len(impact_filenames['impact_archive'])):
+for i in range(10):
 
     # Load simulation archive
     I = impact.Impact()
@@ -297,8 +325,34 @@ for i in range(len(impact_filenames['impact_archive'])):
 
     rfdata_contents = load_lattice_file_contents('Lattice_Files')
 
-    add_datapoints(batch_dim=0, I=I, data_dict=data_dict, run_info=run_info, input_contents=input_contents, rfdata_contents=rfdata_contents, output_unit_list=output_unit_list, unit_list=unit_list)
+    add_datapoints(batch_dim=0, I_list=[I], data_dicts=[data_dict], run_info=run_info, input_contents=input_contents, rfdata_contents=rfdata_contents, output_unit_list=output_unit_list, unit_list=unit_list)
 
+# This works if all stats are at the same location, but they're not, so separate into different files!
+
+# I_list = []
+# data_dicts = []
+# for i in range(5):
+#     I = impact.Impact()
+#     I.load_archive(impact_filenames['impact_archive'][i+5])
+#     I_orig = impact.Impact.from_yaml('Lattice_Files/ImpactT.yaml')
+
+#     lattice_I_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I.input['lattice'])}
+#     lattice_I_orig_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I_orig.input['lattice'])}
+
+#     diff_dict, data_dict = lattice_comparison(lattice_I_dict, lattice_I_orig_dict, I, I_orig)
+    
+#     run_info = extract_run_info(I)
+
+#     input_contents = extract_input_file_contents(I)
+
+#     rfdata_contents = load_lattice_file_contents('Lattice_Files')
+
+#     I_list.append(I)
+#     data_dicts.append(data_dict)
+
+# for I in I_list:
+#     print(I.output['stats'].keys())
+# add_datapoints(batch_dim=0, I_list=I_list, data_dicts=data_dicts, run_info=run_info, input_contents=input_contents, rfdata_contents=rfdata_contents, output_unit_list=output_unit_list, unit_list=unit_list)
     # # Prepare summary keys for this simulation
     # summary_keys = list(data_dict.keys())
     # if 'norm_emit_x' in I.output['stats']:
