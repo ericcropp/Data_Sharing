@@ -182,8 +182,8 @@ scalar_output_cols = {'KLYS:LI10:21:AMPL': 'unitless',
  'TCAV:IN20:490:TC0_C_1_TCTL': 'unitless'}
 
 # List of keys to include in summary output
-summary_keys = [ 'PR10571:XRMS',
-'PR10571:YRMS']
+summary_keys = [ 'XRMS',
+'YRMS']
 # summary_keys += cols
 
 # Lattice location (URL to lattice definition)
@@ -194,7 +194,7 @@ metadata = {'source':'FACET-II Injector','date':'2024-01-27','notes':'Processed 
 summary_table = []
 # Loop over first 5 shots in the dataset
 
-def add_datapoints(batch_dim,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys):
+def add_datapoints(batch_dim,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys,summary_table=summary_table):
     # Add VCC datapoint
     D = DataPoint2()      # Create new data point object
     D.add_observable(batch_dims=batch_dim, feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'pixel_calibration':data_subset['CAMR:LT10:900:RESOLUTION'].values.tolist()}, data_names='VCC_Image', units='um',location_primary=True,control=True)
@@ -213,23 +213,31 @@ def add_datapoints(batch_dim,VCC,data_subset,image_subset,input_cols,scalar_outp
     # Add run metadata
     D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
 
-    D.add_summary(summary_keys, summary_location='final')
+    D.add_summary(summary_keys)
 
     os.makedirs('./Test_Data2/', exist_ok=True)
     # Save data point to HDF5
     D.saveHDF5('./Test_Data2/')
+    entry = {
+        **D.summary.summary
+    }
+    summary_table.append(entry)
+    return D, summary_table
+summary_table = []
 for i in range(5):
     VCC = VCC_all[i:i+1,:,:]  # VCC image for shot i with singleton shot dimension
     data_subset = all_data.loc[[i]]
     image_subset = all_images[i:i+1,:,:]
-    add_datapoints(0,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys)
+    D, summary_table = add_datapoints(0,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys,summary_table=summary_table)
 
 VCC = VCC_all[5:10,:,:]  # VCC image for shot i with singleton shot dimension
 data_subset = all_data.loc[5:9]
 image_subset = all_images[5:10,:,:]
-add_datapoints(0,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys)
+D, summary_table = add_datapoints(0,VCC,data_subset,image_subset,input_cols,scalar_output_cols,metadata,lattice_location=lattice_location,loc_dict=loc_dict,summary_keys=summary_keys,summary_table=summary_table)
 
-
+with open('./Test_Data2/summary_table.yaml', 'w') as f:
+    yaml.dump(summary_table, f)
+    
 
 # for i in range(5):
 #     VCC = VCC_all[i,:,:]  # VCC image for shot i

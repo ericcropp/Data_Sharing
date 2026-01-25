@@ -118,8 +118,39 @@ def main():
 
         # summary_grp = out_f.create_group("summary_yaml")
         # Store the summary as a single attribute table on the summary_yaml group
+            # Write summary information as attributes
         for key in summary[0].keys():
-            out_f.attrs[key] = [entry.get(key) for entry in summary]
+            if key == 'ID':
+                out_f.attrs['IDs'] = [entry.get('ID') for entry in summary]
+            else:
+                # Collect all values for this key
+                values = [entry.get(key) for entry in summary]
+                
+                # Check if all values are lists
+                if all(isinstance(v, list) for v in values):
+                    # Flatten all lists and store with indexed attributes
+                    idx_counter = 0
+                    shot_counts = []
+                    for file_idx, val_list in enumerate(values):
+                        shot_counts.append(len(val_list))
+                        for shot_idx, item in enumerate(val_list):
+                            try:
+                                out_f.attrs[f"{key}_{idx_counter}"] = float(item)
+                            except (ValueError, TypeError):
+                                out_f.attrs[f"{key}_{idx_counter}"] = str(item)
+                            idx_counter += 1
+                    # Store metadata about the structure
+                    out_f.attrs[f"{key}_shots_per_file"] = shot_counts
+                    out_f.attrs[f"{key}_total_shots"] = idx_counter
+                elif all(isinstance(v, (int, float, str)) for v in values):
+                    # Simple scalars - can store as array
+                    try:
+                        out_f.attrs[key] = np.array(values)
+                    except:
+                        out_f.attrs[key] = [str(v) for v in values]
+                else:
+                    # Mixed types - store as strings
+                    out_f.attrs[key] = [str(v) for v in values]
 
     print(f"Combined file written to {args.output_h5}")
 

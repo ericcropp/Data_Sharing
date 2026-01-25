@@ -183,7 +183,7 @@ def load_lattice_file_contents(lattice_path):
         impact_template_contents = f_template.read()
     return (rfdata4_contents, rfdata5_contents, rfdata6_contents, rfdata7_contents, rfdata201_contents, rfdata102_contents, impact_yaml_contents, impact_template_contents)
 
-def add_datapoints(batch_dim, I_list, data_dicts,run_info,input_contents, rfdata_contents, output_unit_list, unit_list):
+def add_datapoints(batch_dim, I_list, data_dicts,run_info,input_contents, rfdata_contents, output_unit_list, unit_list, summary_table):
     D = SimulatedDataPoint2()
     num_pts = len(I_list)
     # Add initial particles - create 1D object array with one element
@@ -222,6 +222,7 @@ def add_datapoints(batch_dim, I_list, data_dicts,run_info,input_contents, rfdata
     summary_keys = list(data_dicts[0].keys())
     if 'norm_emit_x' in I_list[0].output['stats']:
         summary_keys.append('norm_emit_x')
+    # print(summary_keys)
     D.add_summary(
         summary_keys=summary_keys,
         summary_location='final')
@@ -301,9 +302,14 @@ def add_datapoints(batch_dim, I_list, data_dicts,run_info,input_contents, rfdata
     os.makedirs('./Test_Sim_Data2/', exist_ok=True)
     # Save the data point to HDF5
     D.saveHDF5('./Test_Sim_Data2/')
-    return D
+    entry = {
+        **D.summary.summary
+    }
+    summary_table.append(entry)
+    
+    return D, summary_table
 
-
+summary_table = []
 # Loop over all simulation archives listed in Impact_Filenames.yaml
 for i in range(10):
 
@@ -325,7 +331,12 @@ for i in range(10):
 
     rfdata_contents = load_lattice_file_contents('Lattice_Files')
 
-    add_datapoints(batch_dim=0, I_list=[I], data_dicts=[data_dict], run_info=run_info, input_contents=input_contents, rfdata_contents=rfdata_contents, output_unit_list=output_unit_list, unit_list=unit_list)
+    D,summary_table = add_datapoints(batch_dim=0, I_list=[I], data_dicts=[data_dict], run_info=run_info, input_contents=input_contents, rfdata_contents=rfdata_contents, output_unit_list=output_unit_list, unit_list=unit_list,summary_table=summary_table)
+
+    
+with open('./Test_Sim_Data2/summary_table.yaml', 'w') as f:
+    yaml.dump(summary_table, f)
+# Write the summary table to a YAML file
 
 # This works if all stats are at the same location, but they're not, so separate into different files!
 

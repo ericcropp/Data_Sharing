@@ -884,35 +884,113 @@ class DataPoint2:
         self.ID = ""
         self.run_information = RunInformation(run_information if run_information is not None else {})
         self.scalar_output_list = []
-
     def make_ID(self):
         """
         Generates a unique ID for the data point.
         Returns:
             self: The DataPoint2 instance with updated ID.
         """
-        # Serialize observables as a list of dicts for hashing
-        def serialize_obs_dict(obs_dict):
-            # Convert any ndarray values to lists
-            out = {}
-            for k, v in obs_dict.items():
-                if isinstance(v, np.ndarray):
-                    # Only serialize if all elements are numbers
-                    if np.issubdtype(v.dtype, np.number):
-                        out[k] = v.tolist()
-                    else:
-                        # Ignore non-numeric arrays
-                        continue
-                    
-                else:
-                    out[k] = v
-            return out
-
-        observables_list = [serialize_obs_dict(obs.to_dict()) for obs in self.observables]
-        scalar_inputs_str = json.dumps(observables_list, sort_keys=True)
-        id_string = f"{scalar_inputs_str}{self.lattice.lattice_location}"
-        self.ID = hashlib.md5(id_string.encode()).hexdigest()
+        import hashlib
+        
+        # Create a hash based on the actual data bytes, not JSON serialization
+        hasher = hashlib.md5()
+        
+        # Sort observables by location and name for consistency
+        sorted_obs = sorted(
+            [obs for obs in self.observables],
+            key=lambda x: (str(x.location), str(x.data_names))
+        )
+        
+        for obs in sorted_obs:
+            # Hash the location
+            hasher.update(str(obs.location).encode('utf-8'))
+            
+            # Hash the data_names
+            hasher.update(str(obs.data_names).encode('utf-8'))
+            
+            # Hash the actual data
+            if obs.data is not None and obs.data.size > 0:
+                # Skip ParticleGroup objects
+                if obs.data.dtype != object:
+                    # Convert to float64 and create bytes representation
+                    data_float = np.asarray(obs.data, dtype=np.float64)
+                    # Round to fixed precision
+                    data_rounded = np.round(data_float, decimals=10)
+                    # Use tobytes() for deterministic byte representation
+                    hasher.update(data_rounded.tobytes())
+            
+            # Hash units
+            if isinstance(obs.units, str):
+                hasher.update(obs.units.encode('utf-8'))
+            else:
+                hasher.update(str(obs.units).encode('utf-8'))
+        
+        # Add lattice location to hash
+        hasher.update(str(self.lattice.lattice_location).encode('utf-8'))
+        
+        self.ID = hasher.hexdigest()
         return self
+    # def make_ID(self):
+    #     """
+    #     Generates a unique ID for the data point.
+    #     Returns:
+    #         self: The DataPoint2 instance with updated ID.
+    #     """
+    #     # Serialize observables as a list of dicts for hashing
+    #     def serialize_obs_dict(obs_dict):
+    #         # Convert any ndarray values to lists with fixed precision
+    #         out = {}
+    #         for k, v in obs_dict.items():
+    #             if isinstance(v, np.ndarray):
+    #                 # Only serialize if all elements are numbers
+    #                 if v.dtype == object:
+    #                     # Skip object arrays (ParticleGroups, etc.)
+    #                     continue
+    #                 if np.issubdtype(v.dtype, np.number):
+    #                     # Convert to float64, round for deterministic hashing
+    #                     arr = np.asarray(v, dtype=np.float64)
+    #                     arr_rounded = np.round(arr, decimals=10)
+    #                     # Keep original shape - convert to list without sorting
+    #                     out[k] = arr_rounded.tolist()
+    #                 else:
+    #                     # For non-numeric arrays, skip
+    #                     continue
+    #             elif isinstance(v, (list, tuple)):
+    #                 # Convert lists to numpy array and round
+    #                 try:
+    #                     arr = np.array(v, dtype=np.float64)
+    #                     arr_rounded = np.round(arr, decimals=10)
+    #                     out[k] = arr_rounded.tolist()
+    #                 except (ValueError, TypeError):
+    #                     # If can't convert to float, use string representation
+    #                     out[k] = [str(x) for x in v]
+    #             elif isinstance(v, (float, np.floating)):
+    #                 # Round floats to fixed precision
+    #                 out[k] = round(float(v), 10)
+    #             elif isinstance(v, (int, np.integer)):
+    #                 out[k] = int(v)
+    #             elif isinstance(v, str):
+    #                 out[k] = v
+    #             elif isinstance(v, (str, bool, type(None))):
+    #                 out[k] = v
+    #             # else:
+    #             #     # For other types, use string representation
+    #             #     out[k] = str(v)
+    #         return out
+
+    #     # Include ALL observables, not just control=True
+    #     # Only include control=True observables for ID generation
+    #     control_observables = [obs for obs in self.observables if obs.control]
+    #     observables_list = [serialize_obs_dict(obs.to_dict()) for obs in control_observables]
+        
+        
+    #     # Sort the list by a deterministic key (e.g., location + name)
+    #     observables_list = sorted(observables_list, key=lambda x: (str(x.get('location', '')), str(x.get('name', ''))))
+        
+    #     scalar_inputs_str = json.dumps(observables_list, sort_keys=True)
+    #     id_string = f"{scalar_inputs_str}{self.lattice.lattice_location}"
+    #     self.ID = hashlib.md5(id_string.encode()).hexdigest()
+    #     return self
     
     # def add_inputs(self, scalar_inputs=None, input_distribution=None, input_distribution_attrs=None):
     #     """
@@ -992,44 +1070,49 @@ class DataPoint2:
         summary = {}
         d = {}
         # print(self.summary.summary_keys)
-        for a in self.observables:
-            # print(a.datum_name, a.datum_type, a.location, a.control)
-            if np.shape(a.feature_dims) == 0 and len(a.location) == 1 and len(a.data_names) == 1:
-                # print('condition met')
-                new_key = a.location[0] + ':' + a.data_names[0]
-                d[new_key] = a.to_dict()
-        # print(d)
-        for key in d.keys():
-            # n = d[key]['location'][0]
+        # Get scalar values
+        # for a in self.observables:
+        #     # print(a.datum_name, a.datum_type, a.location, a.control)
+        #     if a.feature_dims == 0 and len(a.location) == 1 and len(a.data_names) == 1:
+        #         # print('condition met')
+        #         new_key = a.location[0] + ':' + a.data_names[0]
+        #         d[new_key] = a.to_list()
+        # # print(d)
+        # for key in d.keys():
+        #     # n = d[key]['location'][0]
 
-            data = np.squeeze(d[key]['value']).tolist()
-            if isinstance(data, (int, float, np.integer, np.floating)):
-                data = [data]
-            summary[key] = data
+        #     data = np.squeeze(d[key]).tolist()
+        #     if isinstance(data, (int, float, np.integer, np.floating)):
+        #         data = [data]
+        #     summary[key] = data
                 
-            
         for key in self.summary.summary_keys:
-            # print(key)
-            t = key.split(':')
-            if len(t) == 2:
-                loc = t[0]
-                name = t[1]
-                for observable in self.observables:
-                    # print(observable.data_names,name, observable.location, [loc])
-                    if (
-                        observable.data_names == name
-                        and observable.location == [loc]
-                        and isinstance(observable.location, (list, np.ndarray))
-                        and len(observable.location) == 1
-                    ):
-                        # print('condition met')
-                        data = np.squeeze(observable.data).tolist()
+            for observable in self.observables:
+                # print(key, observable.data_names, observable.location_primary)
+                if (
+                    key in observable.data_names
+                    and observable.location_primary == True
+                ):
+                    data = np.squeeze(observable.data).tolist()
+                    if isinstance(data, (int, float, np.integer, np.floating)):
+                        data = [data]
+                    summary[key] = data
+                    break
+                elif key in observable.data_names and observable.location_primary == False:
+                    loc = self.summary.summary_location
+                    if loc == 'final':
+                        loc = observable.location[-1]
+                    # print(key)
+                    # print(loc)
+                    # if isinstance(loc, str):
+                    if loc in observable.location:
+                        idx = next(i for i, l in enumerate(observable.location) if l == loc)
+                        data = np.squeeze(observable.data[:,idx]).tolist()
                         if isinstance(data, (int, float, np.integer, np.floating)):
                             data = [data]
                         summary[key] = data
-
                         break
-               
+            
             # elif key.split(':')[-1] in self.scalar_output_list:
             #     output_dict = next((d for d in self.observables if d.datum_name == key.split(':')[-1]), None)
             #     if output_dict is not None:
@@ -1054,7 +1137,7 @@ class DataPoint2:
             summary["simulation_version"] = self.simulation_metadata.simulation_version
             # "simulation_input_file": self.simulation_metadata.simulation_input_file
         
-
+        # print(summary)
         self.summary.summary = summary
         self.summary.summary_keys = list(summary.keys())
         return self
@@ -1180,20 +1263,23 @@ class DataPoint2:
                                 data[idx] = path
                                 pg.write(pg_grp)
                                 j += 1
-                            out_grp.create_dataset(obs_name, data=data.astype('S'))
+                            dataset = out_grp.create_dataset(obs_name, data=data.astype('S'))
                         else:
-                            out_grp.create_dataset(obs_name, data=np.array(observable.data))
-
+                            dataset = out_grp.create_dataset(obs_name, data=np.array(observable.data))
+                        dataset.attrs["location"] = str(observable.location[0])
+                        dataset.attrs["control"] = observable.control
+                        if isinstance(observable.units, str):
+                            dataset.attrs["units"] = observable.units
+                        else:
+                            dataset.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
+                        for k, v in observable.attrs.items():
+                            dataset.attrs[k] = v
                     # Set attributes
-                    location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
-                    out_grp.attrs["location"] = location_value
-                    out_grp.attrs["control"] = observable.control
-                    if isinstance(observable.units, str):
-                        out_grp.attrs["units"] = observable.units
-                    else:
-                        out_grp.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
-                    for k, v in observable.attrs.items():
-                        out_grp.attrs[k] = v
+                    # location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
+                    # out_grp.attrs["location"] = location_value
+                    # out_grp.attrs["control"] = observable.control
+                    
+                    
 
 
             if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
@@ -1206,7 +1292,30 @@ class DataPoint2:
             f.attrs["run_information_notes"] = self.run_information.notes
             f.attrs["Data_Standard_Version"] = VERSION
             for key in self.summary.summary_keys:
-                f.attrs[key] = getattr(self.summary, "summary", {}).get(key, "")
+                value = getattr(self.summary, "summary", {}).get(key, "")
+                # Convert to appropriate type for HDF5 attributes
+                if isinstance(value, list):
+                    if value:  # non-empty list
+                        # Store each element as a separate indexed attribute
+                        for idx, item in enumerate(value):
+                            try:
+                                f.attrs[f"{key}_{idx}"] = float(item)
+                            except (ValueError, TypeError):
+                                f.attrs[f"{key}_{idx}"] = str(item)
+                        # Also store the length for reconstruction
+                        f.attrs[f"{key}_number_shots"] = len(value)
+                    else:
+                        f.attrs[f"{key}_number_shots"] = 0
+                elif isinstance(value, np.ndarray):
+                    # Flatten and store as indexed attributes
+                    flat = value.flatten()
+                    for idx, item in enumerate(flat):
+                        f.attrs[f"{key}_{idx}"] = item
+                    f.attrs[f"{key}_length"] = len(flat)
+                elif isinstance(value, (int, float, np.integer, np.floating)):
+                    f.attrs[key] = value
+                else:
+                    f.attrs[key] = str(value)
             f.attrs["summary_location"] = self.summary.summary_location
     # def saveHDF5(self, fileloc=None):
     #     """
