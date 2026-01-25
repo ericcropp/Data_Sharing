@@ -22,3 +22,8 @@ The data used for making experimental and simulation examples are in **Ex_Experi
 For making batch-level HDF5 files, use **Combine_Files.py** with first command line argument as the input directory, and the second the output directory
 
 The beginnings of a more formal standard are seen in **Definitions.md**
+
+History note:
+On 2026-01-25 the repository history was rewritten to migrate large binary
+artifacts to Git LFS. Commit hashes prior to this date changed, but all code
+history was preserved.
