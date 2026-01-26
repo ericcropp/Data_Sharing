@@ -1,116 +1,117 @@
-"""
-Module: Data_Standard_2
-This module provides classes and utilities for representing, validating, and saving standardized data points for accelerator physics simulations and experiments. 
-It supports scalar inputs, input distributions (images or ParticleGroup), lattice information, outputs, summaries, run information, and simulation metadata. 
-Data can be serialized to HDF5 format.
+"""Data Standard 2: Standardized Format for Accelerator Physics Data
 
-Classes:
---------
-SingleInput:
-    Represents a single scalar input parameter.
-    Attributes:
-        name (str): Name of the input.
-        value: Value of the input.
-        location (str): Location or context of the input.
-        units (str): Units of the input value.
-        description (str): Description of the input.
-    Methods:
-        to_dict(): Returns a dictionary representation of the input.
-SingleOutput:
-    Represents a single output datum.
-    Attributes:
-        location: Location(s) associated with the output.
-        datum: Output value(s).
-        attrs (dict): Additional attributes.
-        datum_name (str): Name of the output datum.
-        datum_type (str): Type of datum ('scalar', 'image', 'distribution').
-    Raises:
-        TypeError, ValueError: For invalid types or mismatched data.
-Inputs:
-    Manages scalar inputs and input distributions.
-    Attributes:
-        scalar_inputs (dict): Dictionary of SingleInput instances.
-        input_distribution: Input distribution (image or ParticleGroup).
-        input_distribution_attrs (dict): Attributes for input distribution.
-    Methods:
-        input_distribution_checker(allow_blank): Validates input distribution.
-        add_input_distribution(input_distribution, input_distribution_attrs): Adds input distribution.
-        check_scalar_inputs(allow_blank): Validates scalar inputs.
-        add_scalar_inputs(scalar_inputs): Adds scalar inputs.
+This module provides a comprehensive framework for representing, validating, and saving
+standardized data points from accelerator physics simulations and experiments.
+
+Key Features:
+-------------
+- Hierarchical observable data structure with flexible dimensionality
+- Support for scalar measurements, 1D waveforms, 2D images, and ParticleGroup distributions
+- Lattice configuration management (to be replaced by PALS lattice standard)
+- Automatic ID generation based on data content for reproducibility
+- HDF5 serialization with metadata preservation
+- Summary extraction for quick querying
+- Simulation and experimental run metadata tracking
+
+Data Organization:
+------------------
+Data is organized into observables with the following structure:
+- batch_dims: Number of batch dimensions (e.g., parameter sweeps)
+- feature_dims: Number of feature dimensions (0=scalar, 1=waveform, 2=image)
+- shots_per_batch: Number of shots per batch
+- location: Physical or logical location(s) in the beamline (distance from cathode or component name)
+- data_names: Names of the data fields (e.g., 'xrms' on a screen)
+- units: Physical units with automatic prefix handling
+- control: Boolean flag indicating control vs measured parameters
+
+Main Classes:
+-------------
+SingleObservable:
+    Represents a single observable measurement or simulation output.
+    Handles validation of data dimensions, units, locations, and data types.
+    Supports scalar values, multi-dimensional arrays, and ParticleGroup objects.
+
+Observables (list):
+    Container for multiple SingleObservable instances.
+    Provides methods to add observables and validate consistency.
+
 Lattice:
-    Represents lattice configuration.  This will be replaced by PALS lattice standard in the future.
-    Attributes:
-        lattice_location (str): Location of the lattice.
-        lattice_files (list or dict): Lattice files or their contents.
-    Methods:
-        process_lattice_files(lattice_files): Loads lattice files.
-        add_lattice(lattice_location, lattice_files): Adds lattice info.
-        lattice_checker(allow_blank): Validates lattice info.
-Outputs (list):
-    Container for output data.
-    Methods:
-        add_output(location, datum, attrs, datum_name, datum_type): Adds an output.
-        output_checker(allow_blank): Validates outputs.
+    Stores beamline configuration information.
+    Can reference external lattice files or embed lattice definitions.
+    Supports PV (Process Variable) tables for experimental data.
+
 Summary:
-    Represents summary information for a data point.
-    Attributes:
-        summary_keys (list): Keys to include in summary.
-        summary_location: Location for summary extraction.
-    Methods:
-        add_summary(summary_keys, summary_location): Adds summary info.
-        summary_checker(allow_blank): Validates summary info.
+    Manages summary information for fast data point queries.
+    Extracts specified observables at particular locations.
+
 RunInformation:
-    Stores metadata about the run.
-    Attributes:
-        source (str): Source of the run.
-        date (str): Date of the run.
-        notes (str): Additional notes.
-    Methods:
-        add_run_information(source, date, notes): Adds run info.
-        run_info_checker(allow_blank): Validates run info.
+    Tracks metadata about data origin (source, date, notes).
+
 DataPoint2:
-    Main class representing a standardized data point.
-    Attributes:
-        inputs (Inputs): Input data.
-        lattice (Lattice): Lattice info.
-        outputs (Outputs): Output data.
-        summary (Summary): Summary info.
-        ID (str): Unique identifier.
-        run_information (RunInformation): Run metadata.
-        scalar_output_list (list): List of scalar output names.
-    Methods:
-        make_ID(): Generates unique ID.
-        add_inputs(...): Adds inputs.
-        add_lattice(...): Adds lattice info.
-        add_run_information(...): Adds run info.
-        add_observable(...): Adds output.
-        add_summary(...): Adds summary info.
-        get_summary(): Extracts summary data.
-        checker(): Validates all components.
-        finalize(): Finalizes and validates the data point.
-        saveHDF5(fileloc): Saves the data point to HDF5.
+    Main container class representing a complete standardized data point.
+    Combines observables, lattice, summary, and run information.
+    Generates unique IDs based on data content (MD5 hash).
+    Provides HDF5 serialization with proper handling of ParticleGroup objects.
+
 SimulationMetadata:
-    Stores simulation metadata.
-    Attributes:
-        simulation_start (str): Simulation start time.
-        simulation_end (str): Simulation end time.
-        simulation_code (str): Simulation code name.
-        simulation_input_file (str): Input file for simulation.
-    Methods:
-        add_simulation_data(...): Adds simulation metadata.
-        sim_data_checker(allow_blank): Validates simulation metadata.
-SimulatedDataPoint2 (DataPoint2):
-    Extends DataPoint2 to include simulation metadata.
-    Attributes:
-        simulation_metadata (SimulationMetadata): Simulation metadata.
-    Methods:
-        add_simulation_data(...): Adds simulation metadata.
+    Stores simulation-specific metadata (start/end times, code version, input files).
+
+SimulatedDataPoint2 (extends DataPoint2):
+    Specialized version of DataPoint2 that includes simulation metadata.
+
+Usage Example:
+--------------
+    # Create a data point
+    D = DataPoint2()
+    
+    # Add a scalar observable (e.g., beam charge)
+    D.add_observable(
+        batch_dims=0,
+        feature_dims=0,  # scalar
+        location=['ICT1'],
+        data=np.array([250.0]),  # pC
+        data_names=['charge'],
+        units='pC',
+        control=False
+    )
+    
+    # Add a 2D image (e.g., screen image)
+    D.add_observable(
+        batch_dims=0,
+        feature_dims=2,  # 2D image
+        location=['Screen1'],
+        data=image_array,
+        data_names=['image'],
+        units='counts',
+        attrs={'pxcal': 1e-6}  # pixel calibration
+    )
+    
+    # Add lattice and metadata
+    D.add_lattice(lattice_location='FACET-II')
+    D.add_run_information(source='FACET-II', date='2025-01-26', notes='Example run')
+    
+    # Finalize and save
+    D.finalize()
+    D.saveHDF5('./output/')
+
 Exceptions:
 -----------
-TypeError, ValueError, AssertionError: Raised for invalid input types, values, or missing required information.
+TypeError: Raised for invalid data types
+ValueError: Raised for invalid values or dimension mismatches
+AssertionError: Raised for missing required information
+
 Dependencies:
 -------------
-numpy, pandas, pmd_beamphysics.ParticleGroup, hashlib, json, h5py, os
+- numpy: Array operations
+- pandas: Data frame handling (optional for inputs)
+- pmd_beamphysics: ParticleGroup objects for particle distributions
+- h5py: HDF5 file I/O
+- hashlib: MD5 hash generation for unique IDs
+- json: JSON serialization for hashing
+- os: File system operations
+- copy: Deep copying for ParticleGroup handling
+
+Version: 2026-01-26
 """
 import numpy as np
 import pandas as pd
@@ -121,7 +122,7 @@ import h5py
 import os
 import copy
 
-VERSION = '2025-11-24'
+VERSION = '2026-01-26'
 
 def unit_checker(unit):
     """
@@ -152,56 +153,55 @@ def unit_checker(unit):
     return float(prefix), valid_unit
 
 
-# """
-# Represents a single scalar input parameter for the data standard.
-# """
-# class SingleInput:
-#     def __init__(self, name="", value=None, location="", units="", description=""):
-#         """
-#         Initialize a SingleInput instance.
-#         Args:
-#             name (str): Name of the input.
-#             value: Value of the input.
-#             location (str): Beamline location of the input (str or float).
-#             units (str): Units of the input value.
-#             description (str): Description of the input.
-#         """
-#         if name == "" or value is None or units == "" or location == "":
-#             raise ValueError("name, value, units, and location must not be blank")
-#         self.name = name
-#         self.location = location
-#         prefix, valid_units = unit_checker(units)
-#         try:
-#             self.value = float(value) * prefix
-#         except Exception:
-#             self.value = np.nan
-#         self.units = units if valid_units == "Custom Unit" else valid_units
-#         self.description = description
-
-#     def to_dict(self):
-#         """
-#         Returns a dictionary representation of the input.
-#         Returns:
-#             dict: Dictionary with input attributes.
-#         """
-#         # Ensure units is always a string for JSON serialization
-#         if isinstance(self.units, str):
-#             units_str = self.units
-#         else:
-#             units_str = getattr(self.units, "unitSymbol", str(self.units))
-#         return {
-#             "name": self.name,
-#             "value": self.value,
-#             "location": self.location,
-#             "units": units_str,
-#             "description": self.description
-#         }
-
-
-"""
-Represents a single output datum for the data standard.
-"""
+# ==============================================
+# SingleObservable: Core observable data class
+# ==============================================
 class SingleObservable:
+    """
+    Represents a single observable measurement or simulation output.
+
+    This class handles data with flexible dimensionality:
+    - Batch dimensions: For parameter sweeps or batch processing
+    - Feature dimensions: 0 (scalar), 1 (waveform), 2 (image), etc.
+    - Shots per batch: Multiple shots within each batch
+    - Location/name dimensions: Multiple locations or data fields
+
+    The class validates data structure and handles unit conversion.
+
+    Attributes
+    ----------
+    batch_dims : int
+        Number of batch dimensions for parameter sweeps or batch processing.
+    feature_dims : int
+        Number of feature dimensions (0=scalar, 1=waveform, 2=image).
+    shots_per_batch : int
+        Number of shots per batch (0 if not using batch shots).
+    location : ndarray
+        Physical or logical location(s) in the beamline (1D array).
+    data : ndarray
+        Observable data array with shape determined by dimensions.
+    data_names : ndarray
+        Names of the data fields (1D string array).
+    location_primary : bool
+        If True, data is grouped by location; if False, by data type.
+    attrs : dict
+        Additional attributes (e.g., pixel calibration for images).
+    control : bool
+        Flag indicating control/input parameter (True) vs measured/output (False).
+    units : str or unit object
+        Physical units with automatic prefix handling.
+    unit_multiplier : float
+        Multiplier for unit prefix conversion.
+
+    Methods
+    -------
+    __init__(batch_dims, feature_dims, shots_per_batch, location, data, attrs, data_names, units, location_primary, control)
+        Initialize a SingleObservable instance with data and metadata.
+    data_dim_checker()
+        Validates that data array dimensions match the specified structure.
+    to_dict()
+        Returns a dictionary representation of the observable (for control parameters).
+    """
     def __init__(self, batch_dims=0, feature_dims=0, shots_per_batch=0, location=None, data=None, attrs=None, data_names=None, units=None, location_primary=True,control=False):
         """
         Initialize a SingleObservable instance.
@@ -305,9 +305,15 @@ class SingleObservable:
             self.data_dim_checker()
 
     def data_dim_checker(self):
-        # Check number of dimensions in data
-        # print(self.location)
-        # print(self.data_names)
+        """
+        Validates that data array dimensions match the specified batch, feature, and metadata dimensions.
+        
+        The expected total number of dimensions is calculated as:
+        batch_dims + feature_dims + shots_per_batch + location_dim + names_dim + 1 (shots dimension)
+        
+        Raises:
+            ValueError: If data dimensions don't match the expected structure.
+        """
         if len(self.location) == 1:
             len_dim = 0
         elif len(self.location) > 1:
@@ -342,179 +348,35 @@ class SingleObservable:
         }
         else:
             return {}
-        # elif self.datum_type == 'scalar':
-        #     if isinstance(self.location,list):
-        #         for d in self.datum:
-        #             assert isinstance(d, (int, float, np.integer, np.floating)), "Each item in datum must be a scalar (int or float) for scalar data."
-        #     else:
-        #         assert isinstance(self.datum, (int, float, np.integer, np.floating)), f"datum must be a scalar (int or float) for scalar data. Got type: {type(self.datum)}"
-        
 
-# def input_distribution_checker(input_distribution, input_distribution_attrs):
-#     """
-#     Checks the validity of the input distribution and its attributes.
-#     Args:
-#         input_distribution: The input distribution (numpy array or ParticleGroup).
-#         input_distribution_attrs (dict): Attributes for the input distribution.
-#     Returns:
-#         str: Type of input distribution ('image' or 'ParticleGroup').
-#     Raises:
-#         TypeError, ValueError, AssertionError: For invalid types or missing required attributes.
-#     """
-#     if not isinstance(input_distribution_attrs, dict):
-#         raise TypeError("input_distribution_attrs must be a dict")
 
-#     arr = np.array(input_distribution)
-#     if arr.ndim == 2:
-#         # It's an image
-#         if "pixel_calibration" not in input_distribution_attrs:
-#             raise AssertionError("input_distribution_attrs must contain 'pixel_calibration' for image input_distribution")
-#         return "image"
-#     else:
-#         raise ValueError("input_distribution must be a 2D numpy array to be considered an image")
-
-# """
-# Manages scalar inputs and input distributions for the data standard.
-# """
-# class Inputs:
-#     def input_distribution_checker(self,allow_blank = False):
-#         """
-#         Validates the input distribution and its attributes.
-#         Args:
-#             allow_blank (bool): If True, allows blank input distribution.
-#         Returns:
-#             str: Type of input distribution ('image' or 'ParticleGroup').
-#         Raises:
-#             TypeError, ValueError, AssertionError: For invalid types or missing required attributes.
-#         """
-#         if allow_blank:
-#             if (self.input_distribution is None or (isinstance(self.input_distribution, (list, dict)) and len(self.input_distribution) == 0)) and \
-#                 (self.input_distribution_attrs is None or (isinstance(self.input_distribution_attrs, dict) and len(self.input_distribution_attrs) == 0)):
-#                 return None
-#         if not isinstance(self.input_distribution_attrs, dict):
-#             raise TypeError("input_distribution_attrs must be a dict")
-
-#         if isinstance(self.input_distribution, np.ndarray):
-#             arr = self.input_distribution
-#             if arr.ndim == 2:
-#                 # It's an image
-#                 if "pixel_calibration" not in self.input_distribution_attrs:
-#                     raise AssertionError("input_distribution_attrs must contain 'pixel_calibration' for image input_distribution")
-#                 return "image"
-#             else:
-#                 raise ValueError("input_distribution must be a 2D numpy array to be considered an image")
-#         elif isinstance(self.input_distribution, ParticleGroup):
-#             # Accept ParticleGroup as valid
-#             return "ParticleGroup"
-#         else:
-#             raise ValueError("input_distribution must be a 2D numpy array or ParticleGroup, but received type: {}".format(type(self.input_distribution)))
-        
-#     def add_input_distribution(self, input_distribution, input_distribution_attrs):
-#         """
-#         Adds input distribution and its attributes.
-#         Args:
-#             input_distribution: The input distribution (numpy array or ParticleGroup).
-#             input_distribution_attrs (dict): Attributes for the input distribution.
-#         """
-#         self.input_distribution = input_distribution if input_distribution is not None else {}
-#         self.input_distribution_attrs = input_distribution_attrs if input_distribution_attrs is not None else {}
-#         self.input_distribution_checker(allow_blank=True)
-
-#     def check_scalar_inputs(self,allow_blank = False):
-#         """
-#         Validates scalar inputs.
-#         Args:
-#             allow_blank (bool): If True, allows blank scalar inputs.
-#         Raises:
-#             TypeError: For invalid types.
-#         """
-#         if not isinstance(self.scalar_inputs, dict):
-#             raise TypeError("scalar_inputs must be a dict")
-#         if allow_blank and len(self.scalar_inputs) == 0:
-#             return
-#         for name, single_input in self.scalar_inputs.items():
-#             if not isinstance(single_input, SingleInput):
-#                 raise TypeError(f"Each item in scalar_inputs must be a SingleInput instance. Error at {name}")
-
-#     def add_scalar_inputs(self, scalar_inputs):
-#         """
-#         Adds scalar inputs to the Inputs instance.
-#         Args:
-#             scalar_inputs: Scalar inputs (DataFrame, dict, list, or Series).
-#         Raises:
-#             TypeError, ValueError: For invalid types or missing required keys.
-#         """
-#         if scalar_inputs is not None:
-#             if isinstance(scalar_inputs, pd.DataFrame):
-#                 required_cols = {"name", "value", "location", "units", "description"}
-#                 if required_cols.issubset(scalar_inputs.columns):
-#                     for _, row in scalar_inputs.iterrows():
-#                         self.scalar_inputs[row["name"]] = SingleInput(
-#                             name=row["name"],
-#                             value=row["value"],
-#                             location=row["location"],
-#                             units=row["units"],
-#                             description=row["description"]
-#                     )
-#                 else:
-#                     raise ValueError(f"scalar_inputs DataFrame must have columns: {required_cols}")
-#             elif isinstance(scalar_inputs, dict):
-#                 for name, attrs in scalar_inputs.items():
-#                     if not isinstance(attrs, dict):
-#                         raise TypeError("Each scalar input must be a dictionary")
-#                     self.scalar_inputs[name] = SingleInput(
-#                         name=name,
-#                         value=attrs.get("value"),
-#                         location=attrs.get("location"),
-#                         units=attrs.get("units"),
-#                         description=attrs.get("description")
-#                     )
-#             elif isinstance(scalar_inputs,list):
-#                 for item in scalar_inputs:
-#                     if not isinstance(item, dict) or "name" not in item:
-#                         raise ValueError("Each item in the list must be a dictionary with at least a 'name' key")
-#                     self.scalar_inputs[item["name"]] = SingleInput(
-#                         name=item["name"],
-#                         value=item.get("value"),
-#                         location=item.get("location"),
-#                         units=item.get("units"),
-#                         description=item.get("description")
-#                     )
-#             elif isinstance(scalar_inputs, pd.Series):
-#                 # Convert Series to DataFrame of length 1 and process as DataFrame
-#                 df = scalar_inputs.to_frame().T if isinstance(scalar_inputs, pd.Series) else pd.DataFrame([scalar_inputs])
-#                 required_cols = {"name", "value", "location", "units", "description"}
-#                 if required_cols.issubset(df.columns):
-#                     for _, row in df.iterrows():
-#                         self.scalar_inputs[row["name"]] = SingleInput(
-#                             name=row["name"],
-#                             value=row["value"],
-#                             location=row["location"],
-#                             units=row["units"],
-#                             description=row["description"]
-#                         )
-#                 else:
-#                     raise ValueError(f"scalar_inputs Series must have keys: {required_cols}")
-#             else:
-#                 raise TypeError("scalar_inputs must be a pandas DataFrame, dict of dicts, list of dicts, or pandas Series")
-#         self.check_scalar_inputs(allow_blank=True)
-            
-#     def __init__(self, scalar_inputs=None, input_distribution=None, input_distribution_attrs=None):
-#         """
-#         Initialize Inputs instance.
-#         Args:
-#             scalar_inputs: Scalar inputs.
-#             input_distribution: Input distribution.
-#             input_distribution_attrs: Attributes for input distribution.
-#         """
-#         self.scalar_inputs = {}
-#         self.add_input_distribution(input_distribution, input_distribution_attrs)
-#         self.add_scalar_inputs(scalar_inputs)
-
-"""
-Represents lattice configuration for the data standard.  This will be replaced by PALS lattice standard in the future.
-"""
+# ==============================================
+# Lattice: Beamline configuration
+# ==============================================
 class Lattice:
+    """
+    Represents lattice configuration for the data standard.  This will be replaced by PALS lattice standard in the future.
+
+    Attributes
+    ----------
+    lattice_location : str
+        Location or identifier of the lattice (e.g., 'FACET-II', 'included').
+    lattice_files : dict or list
+        Dictionary of {filename: contents} or list of file paths.
+    PV_table : dict
+        Dictionary of process variable names and their values.
+
+    Methods
+    -------
+    __init__(lattice_location, lattice_files, PV_table)
+        Initialize Lattice instance.
+    process_lattice_files(lattice_files)
+        Loads lattice files from a list or accepts a dict directly.
+    add_lattice(lattice_location, lattice_files, PV_table)
+        Adds lattice location and files.
+    lattice_checker(allow_blank)
+        Validates lattice configuration.
+    """
     def __init__(self, lattice_location=None, lattice_files=None,PV_table=None):
         """
         Initialize Lattice instance.
@@ -597,10 +459,27 @@ class Lattice:
                 if not isinstance(contents, str):
                     raise TypeError("Each value in lattice_files dict must be a string (file contents)")
 
-"""
-Container for output data for the data standard.
-"""
 class Observables(list):
+    """
+    Container for output data for the data standard.
+
+    This class extends Python's built-in list to store SingleObservable objects
+    with additional validation methods.
+
+    Attributes
+    ----------
+    Inherits from list, contains SingleObservable objects.
+    Each element is a SingleObservable instance representing one measurement or output.
+
+    Methods
+    -------
+    __init__(observable_list)
+        Initialize Observables instance from a list.
+    add_observable(batch_dims, feature_dims, shots_per_batch, location, data, attrs, data_names, units, location_primary, control)
+        Adds an observable to the list.
+    observable_checker(allow_blank)
+        Validates all observables in the list.
+    """
     def __init__(self, observable_list=None):
         """
         Initialize Observables instance.
@@ -610,7 +489,6 @@ class Observables(list):
         super().__init__()
         observable_list = observable_list if observable_list is not None else []
 
-        # self = []
         for observable in observable_list:
 
             self.add_observable(observable["location"], observable["datum"], observable["control"], observable["num_shots"], observable["units"], observable.get("attrs"), observable.get("datum_name", ""),observable.get("location_primary", True))
@@ -640,66 +518,6 @@ class Observables(list):
         )
         self.append(output)
         self.observable_checker(allow_blank=True)
-        # assert location is not None, "Output 'location' must not be None"
-        # assert data is not None, "Output 'data' must not be None"
-        # if not isinstance(data, np.ndarray):
-        #     data = np.array(data, dtype=object)
-        # # if not isinstance(control,list):
-        # #     control = [control]
-        # if not isinstance(location, list):
-        #     location = [location]
-        # if not isinstance(datum, np.ndarray):
-        #     datum = np.array(datum)
-        # assert datum_type in {'scalar', 'image', 'distribution', None}, "datum_type must be 'scalar', 'image', 'distribution', or None."
-        
-
-        # assert len(np.shape(datum)) == 4 , "datum must be a 4D array with shape (num_locations, num_shots, data_shape_x, data_shape_y), but got shape {}".format(np.shape(datum)) #num_locations, num_shots, data_shape_x, data_shape_y
-        # assert np.shape(datum)[0] == len(location), "datum[0] must have the same length as location. Got {} instead of {}. Location is: {}".format(len(datum[0]), len(location), location)
-        # assert len(control) == len(location), "control must have the same length as location."
-        # assert all(isinstance(c, bool) for c in control), "All elements in control must be bool"
-        # assert np.shape(datum)[1] == num_shots, "datum[1] must have the same length as num_shots. Got {} instead of {}.".format(np.shape(datum), num_shots)
-        # if datum_type == 'scalar' or datum_type == 'distribution':
-        #     assert np.shape(datum)[2] == 1 and np.shape(datum)[3] == 1, "For scalar datum_type, datum must have shape (num_locations, num_shots, 1, 1)."
-        # if datum_type == 'image':
-        #     assert np.shape(datum)[2] > 1 and np.shape(datum)[3] > 1, "For image datum_type, datum must have shape (num_locations, num_shots, data_shape_x>1, data_shape_y>1)."
-        
-        # if location_primary not in [True, False]:
-        #     raise ValueError("location_primary must be a boolean value")
-        # if location_primary and (isinstance(location, list) or isinstance(location, np.ndarray)) and len(location) > 1:
-        #     # print('Case 1')
-        #     for i, loc in enumerate(location):
-        #         d = datum[i,:,:,:]
-        #         d = np.expand_dims(d, axis=0)
-        #         while d.ndim < 4:
-        #             d = np.expand_dims(d, axis=-1)
-
-        #         output = SingleObservable(
-        #             location=[loc],
-        #             datum=d,
-        #             attrs=attrs,
-        #             datum_name=datum_name,
-        #             datum_type=datum_type,
-        #             units=units,
-        #             location_primary=location_primary,
-        #             control=control[i]
-        #         )
-        #         self.append(output)
-        #         self.observable_checker(allow_blank=True)
-            
-        # else:
-        #     # print('Case 2')
-        #     output = SingleObservable(
-        #     location=location,
-        #     datum=datum,
-        #     attrs=attrs,
-        #     datum_name=datum_name,
-        #     datum_type=datum_type,
-        #     units=units,
-        #     location_primary=location_primary,
-        #     control=control
-        #     )
-        #     self.append(output)
-        #     self.observable_checker(allow_blank=True)
 
     def observable_checker(self,allow_blank = False):
         """
@@ -713,57 +531,32 @@ class Observables(list):
             return
         for observable in self:
             observable.data_dim_checker()
-            # if not isinstance(observable, SingleObservable):
-            #     raise TypeError("Each item in outputs must be a SingleObservable instance.")
-            # if observable.datum_type not in {"scalar", "image", "distribution", None}:
-            #     raise ValueError("datum_type must be 'scalar', 'image', 'distribution', or None.")
-            
-            # assert isinstance(observable.datum, np.ndarray), "datum must be a numpy array."
-            # assert len(np.shape(observable.datum)) == 3 or len(np.shape(observable.datum)) == 4, "datum must have 3 or 4 dimensions."
-            # if observable.datum_type == 'image':
-            #     if len(np.shape(observable.datum)) == 3:
-            #         assert np.shape(observable.datum)[1] > 1 and np.shape(observable.datum)[2] > 1, "For image datum_type, datum must have shape (num_shots, data_shape_x>1, data_shape_y>1)."
-            #     else:
-            #         assert np.shape(observable.datum)[2] > 1 and np.shape(observable.datum)[3] > 1, "For image datum_type, datum must have shape (num_locations, num_shots, data_shape_x>1, data_shape_y>1)."
-            #     # if isinstance(observable.location,list):
-            #     #     for d in observable.datum:
-            #     #         if not isinstance(d, np.ndarray):
-            #     #             d = np.array(d)
-            #     #         assert isinstance(d, np.ndarray) and d.ndim == 2, "Each item in datum must be a 2D np.ndarray for image data."
-            #     # else:
-            #     #     if not isinstance(observable.datum, np.ndarray):
-            #     #         observable.datum = np.array(observable.datum)
-            #     #     assert isinstance(observable.datum, np.ndarray) and observable.datum.ndim == 2, "datum must be a 2D np.ndarray for image data."
-            # elif observable.datum_type == 'distribution':
-            #     # if isinstance(observable.location,list):
-            #     for d in observable.datum.reshape(-1):
-            #         if not isinstance(d, ParticleGroup):
-            #             d = ParticleGroup(d)
-            #         assert isinstance(d, ParticleGroup), "Each item in datum must be a ParticleGroup for distribution data."
-            #     if len(np.shape(observable.datum)) == 3:
-            #         assert np.shape(observable.datum)[1] == 1 and np.shape(observable.datum)[2] == 1, "For distribution datum_type, datum must have shape (num_shots, 1, 1)."
-            #     else:
-            #         assert np.shape(observable.datum)[2] == 1 and np.shape(observable.datum)[3] == 1, "For distribution datum_type, datum must have shape (num_locations, num_shots, 1, 1)."
-            #     # else:
-            #     #     if not isinstance(observable.datum, ParticleGroup):
-            #     #         observable.datum = ParticleGroup(observable.datum)
-            #     #     assert isinstance(observable.datum, ParticleGroup), "datum must be a ParticleGroup for distribution data."
-            # elif observable.datum_type == 'scalar':
-            #     if len(np.shape(observable.datum)) == 3:
-            #         assert np.shape(observable.datum)[1] == 1 and np.shape(observable.datum)[2] == 1, "For distribution datum_type, datum must have shape (num_shots, 1, 1)."
-            #     else:   
-            #         assert np.shape(observable.datum)[2] == 1 and np.shape(observable.datum)[3] == 1, "For distribution datum_type, datum must have shape (num_locations, num_shots, 1, 1)."
-            #     # if isinstance(observable.location,list):
-            #     #     for d in observable.datum:
-            #     #         assert isinstance(d, (int, float, np.integer, np.floating)), "Each item in datum must be a scalar (int or float) for scalar data."
-            #     # else:
-            #     #     assert isinstance(observable.datum, (int, float, np.integer, np.floating)), "datum must be a scalar (int or float) for scalar data."
 
-    
-"""
-Represents summary information for a data point.
-"""
+# ==============================================
+# Summary: Fast data point querying
+# ==============================================
 class Summary:
+    """
+    Represents summary information for a data point.
+
+    Attributes
+    ----------
+    summary_keys : list of str
+        Keys (observable names) to include in the summary for fast querying.
+    summary_location : str, float, or int
+        Location at which to extract summary data ('final' or specific location).
+    summary : dict
+        Dictionary containing extracted summary values (populated by get_summary()).
+
+    Methods
+    -------
+    __init__(summary_keys, summary_location)
+        Initialize Summary instance.
+    add_summary(summary_keys, summary_location)
+        Adds summary keys and location.
+    summary_checker(allow_blank)
+        Validates summary information.
+    """
     def __init__(self, summary_keys=None, summary_location='final'):
         """
         Initialize Summary instance.
@@ -802,10 +595,31 @@ class Summary:
         if not isinstance(self.summary_location, (str, float, int)):
             raise TypeError("summary_location must be a string, float, or int.")
 
-"""
-Stores metadata about the run for the data standard.
-"""
+# ==============================================
+# RunInformation: Metadata tracking
+# ==============================================
 class RunInformation:
+    """
+    Stores metadata about the run for the data standard.
+
+    Attributes
+    ----------
+    source : str
+        Source of the data (e.g., 'FACET-II', 'AWA', 'Impact-T simulation').
+    date : str
+        Date of the run or data collection.
+    notes : str
+        Additional notes or comments about the run.
+
+    Methods
+    -------
+    __init__(run_information)
+        Initialize RunInformation instance.
+    add_run_information(source, date, notes)
+        Adds run information.
+    run_info_checker(allow_blank)
+        Validates run information.
+    """
     def __init__(self, run_information):
         """
         Initialize RunInformation instance.
@@ -853,10 +667,51 @@ class RunInformation:
             raise ValueError("notes must not be empty")
 
 
-"""
-Main class representing a standardized data point for the data standard.
-"""
+# ==============================================
+# DataPoint2: Main standardized data container
+# ==============================================
 class DataPoint2:
+    """
+    Main class representing a standardized data point for the data standard.
+
+    Attributes
+    ----------
+    lattice : Lattice
+        Lattice configuration information.
+    observables : Observables
+        List of SingleObservable objects containing measurements and outputs.
+    summary : Summary
+        Summary information for fast data point querying.
+    ID : str
+        Unique MD5 hash identifier generated from data content.
+    run_information : RunInformation
+        Metadata about the data source, date, and notes.
+    scalar_output_list : list
+        List of scalar output names (legacy, may be deprecated).
+
+    Methods
+    -------
+    __init__(lattice_location, lattice_files, observable_list, summary_keys, summary_location, ID, run_information)
+        Initialize DataPoint2 instance.
+    make_ID()
+        Generates a unique MD5 hash ID based on data content.
+    add_lattice(lattice_location, lattice_files, PV_table)
+        Adds lattice information to the data point.
+    add_run_information(source, date, notes)
+        Adds run metadata to the data point.
+    add_observable(batch_dims, feature_dims, shots_per_batch, location, data, attrs, data_names, units, location_primary, control)
+        Adds an observable measurement or output to the data point.
+    add_summary(summary_keys, summary_location)
+        Specifies keys to include in summary for fast querying.
+    get_summary()
+        Extracts summary data based on specified keys and location.
+    checker()
+        Validates all components of the data point.
+    finalize()
+        Finalizes the data point (generates ID, extracts summary, validates).
+    saveHDF5(fileloc)
+        Saves the data point to HDF5 format with proper structure.
+    """
     def __init__(self,  lattice_location=None, lattice_files=None,
                  observable_list=None, summary_keys=None, summary_location='final', ID="", run_information=None
                  ):
@@ -930,83 +785,6 @@ class DataPoint2:
         
         self.ID = hasher.hexdigest()
         return self
-    # def make_ID(self):
-    #     """
-    #     Generates a unique ID for the data point.
-    #     Returns:
-    #         self: The DataPoint2 instance with updated ID.
-    #     """
-    #     # Serialize observables as a list of dicts for hashing
-    #     def serialize_obs_dict(obs_dict):
-    #         # Convert any ndarray values to lists with fixed precision
-    #         out = {}
-    #         for k, v in obs_dict.items():
-    #             if isinstance(v, np.ndarray):
-    #                 # Only serialize if all elements are numbers
-    #                 if v.dtype == object:
-    #                     # Skip object arrays (ParticleGroups, etc.)
-    #                     continue
-    #                 if np.issubdtype(v.dtype, np.number):
-    #                     # Convert to float64, round for deterministic hashing
-    #                     arr = np.asarray(v, dtype=np.float64)
-    #                     arr_rounded = np.round(arr, decimals=10)
-    #                     # Keep original shape - convert to list without sorting
-    #                     out[k] = arr_rounded.tolist()
-    #                 else:
-    #                     # For non-numeric arrays, skip
-    #                     continue
-    #             elif isinstance(v, (list, tuple)):
-    #                 # Convert lists to numpy array and round
-    #                 try:
-    #                     arr = np.array(v, dtype=np.float64)
-    #                     arr_rounded = np.round(arr, decimals=10)
-    #                     out[k] = arr_rounded.tolist()
-    #                 except (ValueError, TypeError):
-    #                     # If can't convert to float, use string representation
-    #                     out[k] = [str(x) for x in v]
-    #             elif isinstance(v, (float, np.floating)):
-    #                 # Round floats to fixed precision
-    #                 out[k] = round(float(v), 10)
-    #             elif isinstance(v, (int, np.integer)):
-    #                 out[k] = int(v)
-    #             elif isinstance(v, str):
-    #                 out[k] = v
-    #             elif isinstance(v, (str, bool, type(None))):
-    #                 out[k] = v
-    #             # else:
-    #             #     # For other types, use string representation
-    #             #     out[k] = str(v)
-    #         return out
-
-    #     # Include ALL observables, not just control=True
-    #     # Only include control=True observables for ID generation
-    #     control_observables = [obs for obs in self.observables if obs.control]
-    #     observables_list = [serialize_obs_dict(obs.to_dict()) for obs in control_observables]
-        
-        
-    #     # Sort the list by a deterministic key (e.g., location + name)
-    #     observables_list = sorted(observables_list, key=lambda x: (str(x.get('location', '')), str(x.get('name', ''))))
-        
-    #     scalar_inputs_str = json.dumps(observables_list, sort_keys=True)
-    #     id_string = f"{scalar_inputs_str}{self.lattice.lattice_location}"
-    #     self.ID = hashlib.md5(id_string.encode()).hexdigest()
-    #     return self
-    
-    # def add_inputs(self, scalar_inputs=None, input_distribution=None, input_distribution_attrs=None):
-    #     """
-    #     Adds inputs to the data point.
-    #     Args:
-    #         scalar_inputs: Scalar inputs.
-    #         input_distribution: Input distribution.
-    #         input_distribution_attrs: Attributes for input distribution.
-    #     Returns:
-    #         self: The DataPoint2 instance.
-    #     """
-    #     if scalar_inputs is not None:
-    #         self.inputs.add_scalar_inputs(scalar_inputs)
-    #     if input_distribution is not None or input_distribution_attrs is not None:
-    #         self.inputs.add_input_distribution(input_distribution, input_distribution_attrs)
-    #     return self
 
     def add_lattice(self, lattice_location=None, lattice_files=None, PV_table=None):
         """
@@ -1062,33 +840,20 @@ class DataPoint2:
     
     def get_summary(self):
         """
-        Extracts summary data for the data point.
+        Extracts summary data for the data point based on specified summary keys.
+        
+        Handles two modes:
+        1. location_primary=True: Extracts data where the key matches data_names
+        2. location_primary=False: Extracts data at specific location from multi-location observables
+        
         Returns:
-            dict: Summary data.
+            self: The DataPoint2 instance with populated summary.
         """
-        # print(self.scalar_output_list)
         summary = {}
-        d = {}
-        # print(self.summary.summary_keys)
-        # Get scalar values
-        # for a in self.observables:
-        #     # print(a.datum_name, a.datum_type, a.location, a.control)
-        #     if a.feature_dims == 0 and len(a.location) == 1 and len(a.data_names) == 1:
-        #         # print('condition met')
-        #         new_key = a.location[0] + ':' + a.data_names[0]
-        #         d[new_key] = a.to_list()
-        # # print(d)
-        # for key in d.keys():
-        #     # n = d[key]['location'][0]
-
-        #     data = np.squeeze(d[key]).tolist()
-        #     if isinstance(data, (int, float, np.integer, np.floating)):
-        #         data = [data]
-        #     summary[key] = data
                 
         for key in self.summary.summary_keys:
             for observable in self.observables:
-                # print(key, observable.data_names, observable.location_primary)
+                # Case 1: location_primary=True (single location, key in data_names)
                 if (
                     key in observable.data_names
                     and observable.location_primary == True
@@ -1098,13 +863,11 @@ class DataPoint2:
                         data = [data]
                     summary[key] = data
                     break
+                # Case 2: location_primary=False (multiple locations, extract at specific location)
                 elif key in observable.data_names and observable.location_primary == False:
                     loc = self.summary.summary_location
                     if loc == 'final':
                         loc = observable.location[-1]
-                    # print(key)
-                    # print(loc)
-                    # if isinstance(loc, str):
                     if loc in observable.location:
                         idx = next(i for i, l in enumerate(observable.location) if l == loc)
                         data = np.squeeze(observable.data[:,idx]).tolist()
@@ -1112,22 +875,6 @@ class DataPoint2:
                             data = [data]
                         summary[key] = data
                         break
-            
-            # elif key.split(':')[-1] in self.scalar_output_list:
-            #     output_dict = next((d for d in self.observables if d.datum_name == key.split(':')[-1]), None)
-            #     if output_dict is not None:
-            #         if isinstance(output_dict.location, list) and len(output_dict.location) > 1:
-            #             if self.summary.summary_location == 'final':
-            #                 idx = -1
-            #             elif isinstance(self.summary.summary_location, str):
-            #                 if self.summary.summary_location in output_dict.location:
-            #                     idx = next(i for i, loc in enumerate(output_dict.location) if loc == self.summary.summary_location)
-            #             else:
-            #                 idx = next(i for i, loc in enumerate(output_dict.location) if np.isclose(loc, self.summary.summary_location))
-            #             if idx is not None:
-            #                 summary[key] = float(output_dict.datum[idx])
-            #         else:
-            #             summary[key] = float(output_dict.datum)
         summary["ID"] = self.ID
         if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
 
@@ -1145,11 +892,20 @@ class DataPoint2:
     def checker(self):
         """
         Validates all components of the data point.
+        
+        Checks:
+        - Lattice configuration validity
+        - Observables structure and dimensions
+        - Run information completeness
+        - Summary structure
+        - Simulation metadata (if present)
+        
         Returns:
             self: The DataPoint2 instance.
+        
+        Raises:
+            TypeError, ValueError: If any validation fails.
         """
-        # self.inputs.check_scalar_inputs()
-        # self.inputs.input_distribution_checker()
         self.lattice.lattice_checker()
         self.observables.observable_checker()
         self.run_information.run_info_checker()
@@ -1160,9 +916,18 @@ class DataPoint2:
 
     def finalize(self):
         """
-        Finalizes and validates the data point.
+        Finalizes and validates the data point before saving.
+        
+        This method should be called before saving to ensure:
+        1. Unique ID is generated based on data content
+        2. Summary is extracted for fast querying
+        3. All validations pass
+        
         Returns:
             self: The DataPoint2 instance.
+        
+        Raises:
+            TypeError, ValueError: If validation fails.
         """
         self.make_ID()
         self.get_summary()
@@ -1171,34 +936,74 @@ class DataPoint2:
 
     def saveHDF5(self, fileloc=None):
         """
-        Saves the data point to HDF5 format.
+        Saves the data point to HDF5 format with proper handling of all data types.
+        
+        HDF5 Structure:
+        ---------------
+        /lattice/
+            lattice_location (dataset)
+            lattice_files/ (group, if lattice_location='included')
+                <filename> (dataset): File contents
+            PV_table (attributes): Process variable values
+            simulation_input_file (dataset, if SimulatedDataPoint2)
+        
+        /observables/
+            <location_name>/ (group, if location_primary=True)
+                <data_name> (dataset): Observable data
+                    Attributes: location, control, units, custom attrs
+                <data_name>_<idx> (group): ParticleGroup data (if applicable)
+            Type_Grouped_Data/ (group, if location_primary=False)
+                <data_name> (dataset): Observable data array
+                    Attributes: location (array), control, units, custom attrs
+                <data_name>_<idx> (group): ParticleGroup data (if applicable)
+        
+        Root Attributes:
+        ----------------
+        - ID: Unique identifier (MD5 hash)
+        - run_information_source: Data source
+        - run_information_date: Date of run
+        - run_information_notes: Additional notes
+        - Data_Standard_Version: Version of this standard
+        - <summary_key>_<idx>: Summary values (indexed for lists)
+        - <summary_key>_length: Number of items in summary list
+        - summary_location: Location used for summary extraction
+        
         Args:
             fileloc (str): File location or directory to save the HDF5 file.
+                          If directory, filename will be {ID}.h5
+                          If None, saves as {ID}.h5 in current directory
         """
         self.finalize()
-        # Save to HDF5
-        # If fileloc is a directory, append filename
+        
+        # Determine output filename
         if fileloc is None:
             filename = f"{self.ID}.h5"
         elif os.path.isdir(fileloc):
             filename = os.path.join(fileloc, f"{self.ID}.h5")
         else:
             filename = fileloc
-        # Note: self.inputs, self.lattice, self.outputs, self.summary, self.ID, self.run_information
+        
         with h5py.File(filename, "w") as f:
-            # Save lattice
+            # ==========================================
+            # Save lattice configuration
+            # ==========================================
             lattice_grp = f.create_group("lattice")
             lattice_grp.create_dataset("lattice_location", data=self.lattice.lattice_location)
+            
+            # Save lattice files if provided as dictionary
             if isinstance(self.lattice.lattice_files, dict):
                 lattice_files_grp = lattice_grp.create_group("lattice_files")
                 for fname, contents in self.lattice.lattice_files.items():
                     lattice_files_grp.create_dataset(fname, data=np.bytes_(contents))
-            # Save PV_table as attributes in lattice_grp if it exists and is a dict
+            
+            # Save PV_table as attributes if present
             if hasattr(self.lattice, "PV_table") and isinstance(self.lattice.PV_table, dict):
                 for k, v in self.lattice.PV_table.items():
                     lattice_grp.attrs[k] = v
 
+            # ==========================================
             # Save observables
+            # ==========================================
             observables_grp = f.create_group("observables")
             j = 0
             for i, observable in enumerate(self.observables):
@@ -1214,20 +1019,25 @@ class DataPoint2:
                     flat_data = observable.data.flatten()
                     has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
                     
+                    # Handle ParticleGroup objects specially
                     if has_particlegroup:
+                        # Deep copy to avoid modifying original data
                         data = copy.deepcopy(observable.data)
+                        # Write each ParticleGroup to its own HDF5 group
                         for idx in np.ndindex(data.shape):
                             pg = data[idx]
                             path = observable.data_names[0] + '_' + str(j)
                             pg_grp = type_grouped_grp.create_group(path)
-                            data[idx] = path
+                            data[idx] = path  # Replace ParticleGroup with path reference
                             pg.write(pg_grp)
                             j += 1
+                        # Save path references as string dataset
                         out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=data.astype('S'))
                     else:
+                        # Regular numeric data
                         out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=np.array(observable.data))
 
-                    # Set attributes
+                    # Set dataset attributes (location, control, units)
                     location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
                     out_grp.attrs["location"] = location_value
                     out_grp.attrs["control"] = observable.control
@@ -1240,9 +1050,10 @@ class DataPoint2:
                     for k, v in observable.attrs.items():
                         out_grp.attrs[k] = v
 
+                # --- Handle location_primary=True: Group by location ---
                 else:
+                    # Validate location structure
                     assert isinstance(observable.location, (list, np.ndarray)), "observable.location must be a list or np array when location_primary is True, got {}".format(type(observable.location))
-                    
                     assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True, got length {}".format(len(observable.location))
                     
                     if str(observable.location[0]) not in observables_grp:
@@ -1274,23 +1085,21 @@ class DataPoint2:
                             dataset.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
                         for k, v in observable.attrs.items():
                             dataset.attrs[k] = v
-                    # Set attributes
-                    # location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
-                    # out_grp.attrs["location"] = location_value
-                    # out_grp.attrs["control"] = observable.control
-                    
-                    
 
-
+            # Save simulation input file if this is a SimulatedDataPoint2
             if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
                 lattice_grp.create_dataset("simulation_input_file", data=np.bytes_(self.simulation_metadata.simulation_input_file))
 
-            # Save ID and run_information
+            # ==========================================
+            # Save metadata as root attributes
+            # ==========================================
             f.attrs["ID"] = self.ID
             f.attrs["run_information_source"] = self.run_information.source
             f.attrs["run_information_date"] = self.run_information.date
             f.attrs["run_information_notes"] = self.run_information.notes
             f.attrs["Data_Standard_Version"] = VERSION
+            
+            # Save summary keys as indexed attributes (for list values)
             for key in self.summary.summary_keys:
                 value = getattr(self.summary, "summary", {}).get(key, "")
                 # Convert to appropriate type for HDF5 attributes
@@ -1317,224 +1126,36 @@ class DataPoint2:
                 else:
                     f.attrs[key] = str(value)
             f.attrs["summary_location"] = self.summary.summary_location
-    # def saveHDF5(self, fileloc=None):
-    #     """
-    #     Saves the data point to HDF5 format.
-    #     Args:
-    #         fileloc (str): File location or directory to save the HDF5 file.
-    #     """
-    #     self.finalize()
-    #     # Save to HDF5
-    #     # If fileloc is a directory, append filename
-    #     if fileloc is None:
-    #         filename = f"{self.ID}.h5"
-    #     elif os.path.isdir(fileloc):
-    #         filename = os.path.join(fileloc, f"{self.ID}.h5")
-    #     else:
-    #         filename = fileloc
-    #     # Note: self.inputs, self.lattice, self.outputs, self.summary, self.ID, self.run_information
-    #     with h5py.File(filename, "w") as f:
-    #         # Save inputs
-    #         # inputs_grp = f.create_group("inputs")
-    #         # Scalar inputs
-    #         # for name, single_input in self.inputs.scalar_inputs.items():
-    #         #     input_grp = inputs_grp.create_dataset(name,data=single_input.value)
-    #         #     input_grp.attrs["name"] = single_input.name
-    #         #     input_grp.attrs["location"] = single_input.location
-    #         #     if isinstance(single_input.units, str):
-    #         #         input_grp.attrs["units"] = single_input.units
-    #         #     else:
-    #         #         input_grp.attrs["units"] = getattr(single_input.units, "unitSymbol", str(single_input.units))
-    #         #     input_grp.attrs["description"] = single_input.description
-    #         #     input_grp.attrs["datum_type"] = "scalar"
-    #         # # Input distribution
-    #         # if isinstance(self.inputs.input_distribution, np.ndarray):
-    #         #     inputs_grp.create_dataset("input_distribution", data=self.inputs.input_distribution)
-    #         #     dist_type = "image"
-    #         # elif isinstance(self.inputs.input_distribution, ParticleGroup):
-    #         #     self.inputs.input_distribution.write(inputs_grp.create_group("input_distribution"))
-    #         #     dist_type = "ParticleGroup"
-    #         # # Input distribution attrs
-    #         # if hasattr(self.inputs, "input_distribution_attrs") and self.inputs.input_distribution_attrs:
-    #         #     for k, v in self.inputs.input_distribution_attrs.items():
-    #         #         inputs_grp["input_distribution"].attrs[k] = v
-    #         #     inputs_grp["input_distribution"].attrs["datum_type"] = dist_type
 
-    #         # Save lattice
-    #         lattice_grp = f.create_group("lattice")
-    #         lattice_grp.create_dataset("lattice_location", data=self.lattice.lattice_location)
-    #         if isinstance(self.lattice.lattice_files, dict):
-    #             lattice_files_grp = lattice_grp.create_group("lattice_files")
-    #             for fname, contents in self.lattice.lattice_files.items():
-    #                 lattice_files_grp.create_dataset(fname, data=np.bytes_(contents))
-    #         # Save PV_table as attributes in lattice_grp if it exists and is a dict
-    #         if hasattr(self.lattice, "PV_table") and isinstance(self.lattice.PV_table, dict):
-    #             for k, v in self.lattice.PV_table.items():
-    #                 lattice_grp.attrs[k] = v
-
-    #         # Save observables
-    #         observables_grp = f.create_group("observables")
-    #         j = 0
-    #         for i, observable in enumerate(self.observables):
-
-    #             if observable.location_primary == False:
-    #                 # Create or get the "Type_Grouped_Data" group
-    #                 if "Type_Grouped_Data" not in observables_grp:
-    #                     type_grouped_grp = observables_grp.create_group("Type_Grouped_Data")
-    #                 else:
-    #                     type_grouped_grp = observables_grp["Type_Grouped_Data"]
-    #                 assert len(observable.data_names) == 1, "observable.data_names must have length 1 when location_primary is False"
-
-    #                 flat_data = observable.data.flatten()
-    #                 has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
-                    
-    #                 if has_particlegroup:
-    #                     data = copy.deepcopy(observable.data)
-    #                     for idx in np.ndindex(data):
-    #                         pg = data[idx]
-    #                         path = observable.data_names[0] + '_' + str(j)
-    #                         out_grp = type_grouped_grp.create_group(path)
-    #                         data[idx] = path
-    #                         pg.write(out_grp)
-    #                         j += 1
-    #                     out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=np.array(data))
-    #                 else:
-    #                     out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=np.array(observable.data))
-                            
-
-
-    #                 # if observable.datum_type == "scalar":
-    #                 #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
-    #                 # elif observable.datum_type == "image":
-    #                 #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
-    #                 # elif observable.datum_type == "distribution":
-    #                 #     # print(np.shape(observable.datum))
-    #                 #     for j in range(np.shape(observable.datum)[0]):
-    #                 #         for k in range(np.shape(observable.datum)[1]):
-
-    #                 #             path = observable.datum_name + '_' + str(j) + '_' + str(k)
-    #                 #             out_grp = type_grouped_grp.create_group(path)
-    #                 #             # Store the path in an array for later reference
-    #                 #             if not hasattr(self, 'distribution_paths'):
-    #                 #                 distribution_paths = np.empty((np.shape(observable.datum)[0], np.shape(observable.datum)[1], 1, 1), dtype=object)
-    #                 #             distribution_paths[j, k, 0, 0] = path
-    #                 #             if isinstance(observable.datum[j,k,0,0], ParticleGroup):
-    #                 #                 # print(f"Writing distribution datum at {path}")
-    #                 #                 observable.datum[j,k,0,0].write(out_grp)
-    #                 #     # Save the paths as a dataset
-    #                 #     out_grp = type_grouped_grp.create_dataset(observable.datum_name, data=distribution_paths)
-                    
-    #                 # out_grp = type_grouped_grp.create_group(output.datum_name)
-    #                 location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
-    #                 out_grp.attrs["location"] = location_value
-    #                 # out_grp.attrs["datum_type"] = observable.datum_type
-    #                 out_grp.attrs["control"] = observable.control
-
-
-    #                 if isinstance(observable.units, str):
-    #                     out_grp.attrs["units"] = observable.units
-    #                 else:
-    #                     out_grp.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
-
-    #                 for k, v in observable.attrs.items():
-    #                     out_grp.attrs[k] = v
-    #                 # Save datum
-    #             else:
-    #                 # print(output.location)
-    #                 # Create or get the group for this output location
-    #                 # print(observable.location)
-    #                 assert isinstance(observable.location, list) or isinstance(observable.location, np.ndarray), "observable.location must be a list or np array when location_primary is True, got {}".format(type(observable.location))
-                    
-    #                 assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True, got length {}".format(len(observable.location))
-    #                 # print(str(observable.location[0]))
-    #                 if str(observable.location[0]) not in observables_grp:
-    #                     out_grp = observables_grp.create_group(str(observable.location[0]))
-    #                 else:
-    #                     out_grp = observables_grp[str(observable.location[0])]
-
-    #                 flat_data = observable.data.flatten()
-    #                 has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
-                    
-    #                 for k, obs_name in enumerate(observable.data_names):
-    #                     if has_particlegroup:
-    #                         data = copy.deepcopy(observable.data)
-    #                         for idx in np.ndindex(data):
-    #                             pg = data[idx]
-    #                             path = obs_name + '_' + str(j)
-    #                             out_grp = type_grouped_grp.create_group(path)
-    #                             data[idx] = path
-    #                             pg.write(out_grp)
-    #                             j += 1
-    #                         out_grp = out_grp.create_dataset(obs_name, data=np.array(data))
-    #                     else:
-    #                         out_grp = out_grp.create_dataset(obs_name, data=np.array(observable.data))
-
-    #                 # Save datum based on type
-    #                 # if observable.datum_type == "scalar":
-    #                 #     # print(str(output.location) + "/" + output.datum_name)
-    #                 #     data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
-    #                 #     # print(observable.datum_name)
-    #                 #     # print(observable.datum)
-                        
-    #                 # elif observable.datum_type == "image":
-    #                 #     data_ds = out_grp.create_dataset(observable.datum_name, data=np.array(observable.datum))
-    #                 # elif observable.datum_type == "distribution":
-    #                 #     # data_grp = out_grp.create_group(observable.datum_name)
-    #                 #     for j in range(np.shape(observable.datum)[0]):
-                            
-
-    #                 #             path = observable.datum_name + '_' + str(j) 
-    #                 #             data_grp = out_grp.create_group(path)
-    #                 #             # Store the path in an array for later reference
-    #                 #             if not hasattr(self, 'distribution_paths'):
-    #                 #                 distribution_paths = np.empty((1, np.shape(observable.datum)[0], 1, 1), dtype=object)
-    #                 #             distribution_paths[0,j,0, 0] = path
-    #                 #             if isinstance(observable.datum[0,j,0,0], ParticleGroup):
-    #                 #                 # print(f"Writing distribution datum at {path}")
-    #                 #                 observable.datum[0,j,0,0].write(data_grp)
-    #                 #             else:
-    #                 #                 print(f"Datum at {path} is not a ParticleGroup")
-    #                 #     # Save the paths as a dataset
-    #                 #     data_ds = out_grp.create_dataset(observable.datum_name, data=distribution_paths)
-    #                 # else:
-    #                 #     data_ds = out_grp.create_dataset(observable.datum_name, data=observable.datum)
-
-    #                 # Set attributes
-    #                 location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
-    #                 out_grp.attrs["location"] = location_value
-    #                 # out_grp.attrs["datum_type"] = observable.datum_type
-    #                 out_grp.attrs["control"] = observable.control
-    #                 if isinstance(observable.units, str):
-    #                     out_grp.attrs["units"] = observable.units
-    #                 else:
-    #                     out_grp.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
-    #                 for k, v in observable.attrs.items():
-    #                     out_grp.attrs[k] = v
-
-
-    #         if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
-    #             # sim_meta_grp = f.create_group("simulation_metadata")
-    #             # Save simulation_input_file as a dataset within the group
-    #             lattice_grp.create_dataset("simulation_input_file", data=np.bytes_(self.simulation_metadata.simulation_input_file))
-                
-                
-
-
-    #         # Save ID and run_information
-    #         f.attrs["ID"] = self.ID
-    #         f.attrs["run_information_source"] = self.run_information.source
-    #         f.attrs["run_information_date"] = self.run_information.date
-    #         f.attrs["run_information_notes"] = self.run_information.notes
-    #         f.attrs["Data_Standard_Version"] = VERSION
-    #         for key in self.summary.summary_keys:
-    #             # print(key)
-    #             f.attrs[key] = getattr(self.summary, "summary", {}).get(key, "")
-    #         f.attrs["summary_location"] = self.summary.summary_location
-
-"""
-Stores simulation metadata for the data standard.
-"""
+# ==============================================
+# SimulationMetadata: Simulation-specific data
+# ==============================================
 class SimulationMetadata:
+    """
+    Stores simulation metadata for the data standard.
+
+    Attributes
+    ----------
+    simulation_start : str
+        Simulation start time or timestamp.
+    simulation_end : str
+        Simulation end time or timestamp.
+    simulation_code : str
+        Name of the simulation code (e.g., 'Impact-T', 'Astra', 'OPAL').
+    simulation_input_file : str
+        Contents or path of the simulation input file.
+    simulation_version : str
+        Version of the simulation code used.
+
+    Methods
+    -------
+    __init__(simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version)
+        Initialize SimulationMetadata instance.
+    add_simulation_data(simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version)
+        Adds simulation metadata.
+    sim_data_checker(allow_blank)
+        Validates simulation metadata.
+    """
     def __init__(self, simulation_start="", simulation_end="", simulation_code="", simulation_input_file="", simulation_version=""):
         """
         Initialize SimulationMetadata instance.
@@ -1595,9 +1216,37 @@ class SimulationMetadata:
         if self.simulation_version=="":
             raise ValueError("simulation_version must not be empty")
 
+# ==============================================
+# SimulatedDataPoint2: Extended data point for simulations
+# ==============================================
 class SimulatedDataPoint2(DataPoint2):
-    
+    """
+    Extends DataPoint2 to include simulation-specific metadata.
 
+    Inherits all attributes from DataPoint2 and adds:
+
+    Attributes
+    ----------
+    simulation_metadata : SimulationMetadata
+        Simulation-specific metadata (start/end times, code name, version, input file).
+
+    Inherited Attributes
+    --------------------
+    lattice, observables, summary, ID, run_information, scalar_output_list
+        See DataPoint2 for details.
+
+    Methods
+    -------
+    __init__(lattice_location, lattice_files, observable_list, summary_keys, summary_location, ID, run_information, simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version)
+        Initialize SimulatedDataPoint2 instance with simulation metadata.
+    add_simulation_data(simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version)
+        Adds or updates simulation metadata.
+
+    Inherited Methods
+    -----------------
+    make_ID, add_lattice, add_run_information, add_observable, add_summary, get_summary, checker, finalize, saveHDF5
+        See DataPoint2 for details.
+    """
     def __init__(self, lattice_location=None, lattice_files=None,
                  observable_list=None, summary_keys=None, summary_location='final', ID="", run_information=None,
                  simulation_start=None, simulation_end=None, simulation_code="", simulation_input_file="",simulation_version=""):
