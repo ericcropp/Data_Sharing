@@ -858,11 +858,26 @@ class DataPoint2:
                     key in observable.data_names
                     and observable.location_primary == True
                 ):
-                    data = np.squeeze(observable.data).tolist()
-                    if isinstance(data, (int, float, np.integer, np.floating)):
-                        data = [data]
-                    summary[key] = data
-                    break
+                    # Check if this observable's location matches the requested summary_location
+                    loc = self.summary.summary_location
+                    obs_location = observable.location[0]  # Single location for location_primary=True
+                    
+                    # If summary_location is 'final', we need to find the last location with this key
+                    if loc == 'final':
+                        # Continue searching for the last occurrence
+                        data = np.squeeze(observable.data).tolist()
+                        if isinstance(data, (int, float, np.integer, np.floating)):
+                            data = [data]
+                        summary[key] = data
+                        # Don't break - keep looking for later occurrences
+                        continue
+                    elif obs_location == loc:
+                        # Location matches - extract data
+                        data = np.squeeze(observable.data).tolist()
+                        if isinstance(data, (int, float, np.integer, np.floating)):
+                            data = [data]
+                        summary[key] = data
+                        break
                 # Case 2: location_primary=False (multiple locations, extract at specific location)
                 elif key in observable.data_names and observable.location_primary == False:
                     loc = self.summary.summary_location

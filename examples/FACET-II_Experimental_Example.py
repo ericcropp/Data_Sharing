@@ -285,6 +285,7 @@ scalar_output_cols = {
 # These are extracted from the data and saved as file attributes for easy querying
 # Consider moving this to a YAML file (e.g., 'summary_config.yaml')
 summary_keys = ['XRMS', 'YRMS']  # Beam RMS sizes from camera
+summary_location = loc_dict['PROF:IN10:571']  # Location of the profile screen
 
 # ========================================
 # Lattice and run metadata
@@ -366,7 +367,7 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
     
     # Add summary information for quick querying
     # This extracts specified keys and saves them as file attributes
-    D.add_summary(summary_keys)
+    D.add_summary(summary_keys, summary_location=summary_location)
     
     # Save data point to HDF5 file
     os.makedirs(output_dir, exist_ok=True)
