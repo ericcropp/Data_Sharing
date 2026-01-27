@@ -43,11 +43,13 @@ Usage:
 """
 
 import numpy as np
-from data_standard.Data_Standard_2 import DataPoint2
+from data_standard import DataPoint2
+from data_standard import combine_files
 import pandas as pd
 import os
 import yaml
 import argparse
+import shutil
 
 def parse_args():
     """
@@ -66,6 +68,7 @@ def parse_args():
                         help='Directory to save processed HDF5 files and summary')
     parser.add_argument('--lattice_dir', type=str, default='./examples/data/input/FACET-II_Experimental_Data/Lattice_Files/',
                         help='Directory containing lattice files (rfdata*, yaml, etc.)')
+    parser.add_argument('--Combine_Files',type=str,default='True',help='Combine all processed files into a single HDF5 file after processing')
     return parser.parse_args()
 
 # ========================================
@@ -437,6 +440,17 @@ def main():
     print(f"\nProcessing complete. {len(summary_table)} shots processed.")
     print(f"HDF5 files saved to {args.output_dir}")
     print(f"Summary table saved to {summary_file}")
+    # Combine files into a single HDF5 file
+    if args.Combine_Files.lower() == 'true':
+        print("Combining processed files into a single HDF5 file...")
+        combine_files(args.output_dir, os.path.join(os.path.dirname(os.path.dirname(args.output_dir)), 'Combined_Data.h5'))
+
+        print("Combined file created successfully.")
+        shutil.rmtree(args.output_dir)
+
+        os.makedirs(args.output_dir, exist_ok=True)
+        shutil.move(os.path.join(os.path.dirname(os.path.dirname(args.output_dir)), 'Combined_Data.h5'), os.path.join(args.output_dir, 'Combined_Data.h5'))
+    
 
 if __name__ == '__main__':
     main()

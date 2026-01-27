@@ -51,15 +51,10 @@ def copy_file_into_group(src_file: h5py.File,
             without_attrs=False      # keep all attrs on groups/datasets
         )
 
-def main():
-    parser = argparse.ArgumentParser(description="Combine files listed in summary_yaml into a single HDF5 file.")
-    parser.add_argument("input_dir", help="Directory containing summary_yaml and data files")
-    parser.add_argument("output_h5", help="Output HDF5 file path")
-    args = parser.parse_args()
-
-    summary_path = os.path.join(args.input_dir, "summary_table.yaml")
+def combine_files(input_dir: str, output_h5: str):
+    summary_path = os.path.join(input_dir, "summary_table.yaml")
     if not os.path.exists(summary_path):
-        print(f"summary_table.yaml not found in {args.input_dir}")
+        print(f"summary_table.yaml not found in {input_dir}")
         return
 
     with open(summary_path, "r") as f:
@@ -67,13 +62,13 @@ def main():
 
     # Assume summary is a list of dicts with 'id' and 'filename' keys
     combined_data = {}
-    with h5py.File(args.output_h5, "w") as out_f:
+    with h5py.File(output_h5, "w") as out_f:
         for entry in summary:
             file_id = entry.get("ID")
             if not file_id:
                 print(f"Skipping entry with missing id: {entry}")
                 continue
-            file_path = os.path.join(args.input_dir, str(file_id) + '.h5')
+            file_path = os.path.join(input_dir, str(file_id) + '.h5')
             if not os.path.exists(file_path):
                 print(f"File not found: {file_path}")
                 continue
@@ -83,29 +78,9 @@ def main():
             with h5py.File(file_path, "r") as f:
 
                 copy_file_into_group(f, g)
-                # # Copy all datasets under a group named by file_id
-                # combined_data[file_id] = {}
-                # def copy_datasets(name, obj):
-                #     if isinstance(obj, h5py.Dataset):
-                #         combined_data[file_id][name] = obj[()]
-                #     elif isinstance(obj, h5py.Group):
-                #         # Copy group-level attributes
-                #         if "attrs" not in combined_data[file_id]:
-                #             combined_data[file_id]["attrs"] = {}
-                #         combined_data[file_id]["attrs"][name] = dict(obj.attrs)
-                #     elif isinstance(obj, h5py.Dataset):
-                #         # Copy dataset-level attributes
-                #         if "dset_attrs" not in combined_data[file_id]:
-                #             combined_data[file_id]["dset_attrs"] = {}
-                #         combined_data[file_id]["dset_attrs"][name] = dict(obj.attrs)
-                # f.visititems(copy_datasets)
 
-    # Write combined data to output HDF5
-    
-        # for file_id, datasets in combined_data.items():
-        #     grp = out_f.create_group(file_id)
-        #     for dset_name, data in datasets.items():
-        #         grp.create_dataset(dset_name, data=data)
+
+        # Write combined data to output HDF5
         # Add summary YAML as a top-level group
         top_groups = [name for name in out_f.keys() if isinstance(out_f[name], h5py.Group)]
         i = 0
@@ -116,9 +91,8 @@ def main():
                 del out_f[grp_name + '/lattice']  # TO DO: Check that lattice is the same for all files
             i += 1
 
-        # summary_grp = out_f.create_group("summary_yaml")
         # Store the summary as a single attribute table on the summary_yaml group
-            # Write summary information as attributes
+        # Write summary information as attributes
         for key in summary[0].keys():
             if key == 'ID':
                 out_f.attrs['IDs'] = [entry.get('ID') for entry in summary]
@@ -152,7 +126,17 @@ def main():
                     # Mixed types - store as strings
                     out_f.attrs[key] = [str(v) for v in values]
 
-    print(f"Combined file written to {args.output_h5}")
+    # print(f"Combined file written to {output_h5}")
+
+def main():
+    parser = argparse.ArgumentParser(description="Combine files listed in summary_yaml into a single HDF5 file.")
+    parser.add_argument("input_dir", help="Directory containing summary_yaml and data files")
+    parser.add_argument("output_h5", help="Output HDF5 file path")
+    args = parser.parse_args()
+
+    combine_files(args.input_dir, args.output_h5)
+
+    
 
 if __name__ == "__main__":
     main()

@@ -34,12 +34,14 @@ Output:
 """
 
 import numpy as np
-from data_standard.Data_Standard_2 import DataPoint2
+from data_standard import DataPoint2
+from data_standard import combine_files
 import pandas as pd
 import os
 import yaml
 import h5py
 import argparse
+import shutil 
 
 # ========================================
 # Configuration
@@ -67,6 +69,7 @@ def parse_args():
                         help='Directory to save processed HDF5 files and summary')
     parser.add_argument('--lattice_dir', type=str, default='./examples/data/input/AWA_Experimental_Data/Lattice_Files/',
                         help='Directory containing lattice files (rfdata*, yaml, etc.)')
+    parser.add_argument('--Combine_Files',type=str,default='True',help='Combine all processed files into a single HDF5 file after processing')
     return parser.parse_args()
 
 # ========================================
@@ -197,6 +200,7 @@ def main():
     print(f"Processing AWA data files from {args.input_dir}...")
     
     # Process each HDF5 file
+    summary_table = []
     for file in files:
         if file.endswith('.h5'):
             print(f"\n  Processing file: {file}")
@@ -261,8 +265,22 @@ def main():
             os.makedirs(args.output_dir, exist_ok=True)
             # Save data point to HDF5
             D.saveHDF5(args.output_dir)
+            summary_table.append({**D.summary.summary})
 
     print(f"\nProcessing complete. Processed {len([f for f in files if f.endswith('.h5')])} files.")
+    with open(os.path.join(args.output_dir, 'summary_table.yaml'), 'w') as f:
+        yaml.dump(summary_table, f)
 
+    # Combine files into a single HDF5 file
+    if args.Combine_Files.lower() == 'true':
+        print("Combining processed files into a single HDF5 file...")
+        combine_files(args.output_dir, os.path.join(os.path.dirname(os.path.dirname(args.output_dir)), 'Combined_Data.h5'))
+
+        print("Combined file created successfully.")
+        shutil.rmtree(args.output_dir)
+
+        os.makedirs(args.output_dir, exist_ok=True)
+        shutil.move(os.path.join(os.path.dirname(os.path.dirname(args.output_dir)), 'Combined_Data.h5'), os.path.join(args.output_dir, 'Combined_Data.h5'))
+    
 if __name__ == '__main__':
     main()

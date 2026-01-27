@@ -16,9 +16,9 @@ For each simulation archive (.h5 file) in the input directory, the script:
 6. Compiles a summary table of all processed simulations.
 
 Command-line arguments:
-  --input_dir: Directory containing Impact simulation archive files (.h5) [default: 'Ex_Simulation_Data2']
-  --output_dir: Directory to save processed HDF5 files and summary [default: './Test_Sim_Data2/']
-  --lattice_dir: Directory containing lattice files (rfdata*, ImpactT.yaml, etc.) [default: 'Lattice_Files']
+  --input_dir: Directory containing Impact simulation archive files (.h5) [default: './examples/data/input/FACET-II_Simulation_Data/']
+  --output_dir: Directory to save processed HDF5 files and summary [default: './examples/data/output/FACET-II_Simulation_Example/']
+  --lattice_dir: Directory containing lattice files (rfdata*, ImpactT.yaml, etc.) [default: './examples/data/input/FACET-II_Simulation_Data/Lattice_Files/']
 
 Required files in lattice_dir:
 - ImpactT.yaml: Template YAML file for lattice comparison
@@ -34,13 +34,14 @@ Output:
 - summary_table.yaml: Summary of all processed simulations with key parameters and statistics
 
 Usage:
-  python Lume2DataStandard2.py --input_dir <path> --output_dir <path> --lattice_dir <path>
+  python FACET-II_Simulation_Example.py --input_dir <path> --output_dir <path> --lattice_dir <path>
 """
 
 import numpy as np
 
 
-from data_standard.Data_Standard_2 import SimulatedDataPoint2
+from data_standard import SimulatedDataPoint2
+from data_standard import combine_files
 
 import pandas as pd
 import os
@@ -49,6 +50,7 @@ import impact
 import datetime
 from pmd_beamphysics import ParticleGroup
 import argparse
+import shutil
 
 SIMULATION_VERSION = "impact-t=3.1.2; lume-impact=0.10.1"
 
@@ -69,6 +71,7 @@ def parse_args():
                         help='Directory to save processed HDF5 files and summary')
     parser.add_argument('--lattice_dir', type=str, default='./examples/data/input/FACET-II_Simulation_Data/Lattice_Files/',
                         help='Directory containing lattice files (rfdata*, yaml, etc.)')
+    parser.add_argument('--Combine_Files',type=str,default='True',help='Combine all processed files into a single HDF5 file after processing')
     return parser.parse_args()
 
 summary_table = []
@@ -537,5 +540,16 @@ def main():
     
     print(f"Processing complete. Summary written to {os.path.join(args.output_dir, 'summary_table.yaml')}")
 
+    # Combine files into a single HDF5 file
+    if args.Combine_Files.lower() == 'true':
+        print("Combining processed files into a single HDF5 file...")
+        combine_files(args.output_dir, os.path.join(os.path.dirname(os.path.dirname(args.output_dir)), 'Combined_Data.h5'))
+
+        print("Combined file created successfully.")
+        shutil.rmtree(args.output_dir)
+
+        os.makedirs(args.output_dir, exist_ok=True)
+        shutil.move(os.path.join(os.path.dirname(os.path.dirname(args.output_dir)), 'Combined_Data.h5'), os.path.join(args.output_dir, 'Combined_Data.h5'))
+    
 if __name__ == '__main__':
     main()
