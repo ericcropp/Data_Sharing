@@ -127,7 +127,6 @@ D.add_lattice(lattice_location='https://github.com/slaclab/facet2-lattice')
 D.add_run_information(source='FACET-II', date='2025-01-26', notes='Example run')
 
 # Finalize and save
-D.finalize()
 D.saveHDF5('./output/')
 ```
 
