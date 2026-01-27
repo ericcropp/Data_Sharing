@@ -160,25 +160,19 @@ Examples are provided in the `examples/` directory:
 ### FACET-II Simulation Data
 Processes Impact-T simulation archives with particle distributions:
 ```bash
-python examples/FACET-II_Simulation_Example.py \
-    --input_dir ./examples/data/input/FACET-II_Simulation_Data/ \
-    --output_dir ./examples/data/output/FACET-II_Simulation_Example/
+python examples/FACET-II_Simulation_Example.py 
 ```
 
 ### FACET-II Experimental Data
 Converts EPICS-based experimental data:
 ```bash
-python examples/FACET-II_Experimental_Example.py \
-    --input_dir ./examples/data/input/FACET-II_Experimental_Data/ \
-    --output_dir ./examples/data/output/FACET-II_Experimental_Example/
+python examples/FACET-II_Experimental_Example.py 
 ```
 
 ### AWA Experimental Data
 Processes AWA facility data with waveforms and images:
 ```bash
-python examples/AWA_Experimental_Example.py \
-    --input_file ./examples/data/input/AWA_Experimental_Data/DYG12_1759956735.h5 \
-    --output_dir ./examples/data/output/AWA_Experimental_Example/
+python examples/AWA_Experimental_Example.py 
 ```
 
 ## API Stability
