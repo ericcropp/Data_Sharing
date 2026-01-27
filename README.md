@@ -45,6 +45,26 @@ This project has been left intentionally minimal.
 
 ## Installation
 
+### Prerequisites
+
+This repository uses **Git LFS (Large File Storage)** for example data files. Install Git LFS before cloning:
+
+```bash
+# On Ubuntu/Debian
+sudo apt-get install git-lfs
+
+# On macOS
+brew install git-lfs
+
+# On Windows
+# Download from https://git-lfs.github.com/
+
+# Initialize Git LFS
+git lfs install
+```
+
+### Basic Installation
+
 ```bash
 git clone https://github.com/ericcropp/Data_Sharing.git
 cd Data_Sharing
