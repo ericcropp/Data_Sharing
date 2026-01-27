@@ -964,8 +964,7 @@ class DataPoint2:
         - run_information_date: Date of run
         - run_information_notes: Additional notes
         - Data_Standard_Version: Version of this standard
-        - <summary_key>_<idx>: Summary values (indexed for lists)
-        - <summary_key>_length: Number of items in summary list
+        - <summary_key>: Summary values (stored as arrays for lists, scalars otherwise)
         - summary_location: Location used for summary extraction
         
         Args:
@@ -1099,28 +1098,23 @@ class DataPoint2:
             f.attrs["run_information_notes"] = self.run_information.notes
             f.attrs["Data_Standard_Version"] = VERSION
             
-            # Save summary keys as indexed attributes (for list values)
+            # Save summary keys as attributes
             for key in self.summary.summary_keys:
                 value = getattr(self.summary, "summary", {}).get(key, "")
                 # Convert to appropriate type for HDF5 attributes
                 if isinstance(value, list):
                     if value:  # non-empty list
-                        # Store each element as a separate indexed attribute
-                        for idx, item in enumerate(value):
-                            try:
-                                f.attrs[f"{key}_{idx}"] = float(item)
-                            except (ValueError, TypeError):
-                                f.attrs[f"{key}_{idx}"] = str(item)
-                        # Also store the length for reconstruction
-                        f.attrs[f"{key}_number_shots"] = len(value)
+                        try:
+                            # Try to store as numeric array
+                            f.attrs[key] = np.array([float(item) for item in value])
+                        except (ValueError, TypeError):
+                            # Store as string array if not numeric
+                            f.attrs[key] = [str(item) for item in value]
                     else:
-                        f.attrs[f"{key}_number_shots"] = 0
+                        f.attrs[key] = []
                 elif isinstance(value, np.ndarray):
-                    # Flatten and store as indexed attributes
-                    flat = value.flatten()
-                    for idx, item in enumerate(flat):
-                        f.attrs[f"{key}_{idx}"] = item
-                    f.attrs[f"{key}_length"] = len(flat)
+                    # Store array directly
+                    f.attrs[key] = value
                 elif isinstance(value, (int, float, np.integer, np.floating)):
                     f.attrs[key] = value
                 else:
