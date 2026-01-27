@@ -1,12 +1,13 @@
-"""
-This script processes experimental data from the FACET-II Injector and organizes it into a standardized format using the DataPoint2 class. 
-It loads scalar and image data from files, structures inputs and outputs, and saves each shot's data to HDF5 files. 
-Additionally, it generates a summary table of selected parameters and exports it as a YAML file.
+"""Process FACET-II Injector experimental data into standardized format.
+
+This script processes experimental data from the FACET-II Injector and organizes it into a standardized format
+using the DataPoint2 class. It loads scalar and image data from files, structures inputs and outputs,
+and saves each shot's data to HDF5 files. Additionally, it generates a summary table of selected parameters.
 
 Main Steps:
 1. Load scalar and image data from pickle and numpy files.
 2. Define lists of columns for scalar inputs and outputs.
-3. For each shot in the dataset:
+3. For each shot (or batch of shots) in the dataset:
     - Create a DataPoint2 object.
     - Populate scalar inputs with values, locations, units, and descriptions.
     - Add input distribution (VCC image) and pixel calibration attribute.
@@ -17,29 +18,37 @@ Main Steps:
     - Save the data point to an HDF5 file.
     - Append summary information to a summary table.
 4. Write the summary table to a YAML file.
+5. Optionally combine all processed files into a single HDF5 file.
 
-Parameters:
-- fileloc (str): Directory containing the data files.
-- cols (list): List of column names for scalar inputs.
-- scalar_output_cols (list): List of column names for scalar outputs.
-- summary_keys (list): Keys to include in the summary output.
-- lattice_location (str): URL to the lattice definition.
-- metadata (dict): Metadata for run information.
-
-Outputs:
-- HDF5 files for each shot in './Test_Data2/'.
-- YAML summary table in './Test_Data2/summary_table.yaml'.
-
-Dependencies:
-- numpy
-- pandas
-- os
-- yaml
-- argparse
-- Data_Standard_2.DataPoint2
+Command-line Arguments:
+    --input_dir: Directory containing FACET-II experimental data files
+                 [default: './examples/data/input/FACET-II_Experimental_Data/']
+    --output_dir: Directory to save processed HDF5 files and summary
+                  [default: './examples/data/output/FACET-II_Experimental_Example/']
+    --lattice_dir: Directory containing lattice files (rfdata*, yaml, etc.)
+                   [default: './examples/data/input/FACET-II_Experimental_Data/Lattice_Files/']
+    --Combine_Files: Combine all processed files into single HDF5 file after processing
+                     [default: 'True']
 
 Usage:
-  python Experiment2DataStandard2.py --input_dir <path> --output_dir <path>
+    # Process with default paths and combine files
+    python FACET-II_Experimental_Example.py
+    
+    # Process with custom paths without combining
+    python FACET-II_Experimental_Example.py \
+        --input_dir /path/to/data \
+        --output_dir /path/to/output \
+        --Combine_Files False
+
+Dependencies:
+    - numpy, pandas, os, yaml, argparse, shutil
+    - data_standard.DataPoint2
+    - data_standard.combine_files
+
+Output:
+    - Individual standardized HDF5 files for each shot/batch (if Combine_Files=False)
+    - summary_table.yaml: Summary of key parameters from all processed shots
+    - Combined_Data.h5: Single merged file containing all shots (if Combine_Files=True)
 """
 
 import numpy as np
@@ -57,9 +66,14 @@ def parse_args():
     
     Returns:
         argparse.Namespace: Parsed command-line arguments containing:
-            - input_dir: Directory with FACET-II experimental data files
-            - output_dir: Directory to save processed HDF5 files and summary
-            - lattice_dir: Directory containing lattice files (rfdata*, yaml, etc.)
+            - input_dir (str): Directory with FACET-II experimental data files
+                             Default: './examples/data/input/FACET-II_Experimental_Data/'
+            - output_dir (str): Directory to save processed HDF5 files and summary
+                              Default: './examples/data/output/FACET-II_Experimental_Example/'
+            - lattice_dir (str): Directory containing lattice files (rfdata*, yaml, etc.)
+                               Default: './examples/data/input/FACET-II_Experimental_Data/Lattice_Files/'
+            - Combine_Files (str): Whether to combine all processed files ('True'/'False')
+                                 Default: 'True'
     """
     parser = argparse.ArgumentParser(description='Process FACET-II experimental data into standardized format.')
     parser.add_argument('--input_dir', type=str, default='./examples/data/input/FACET-II_Experimental_Data/',
@@ -370,9 +384,41 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
 # ========================================
 def main():
     """
-    Main execution function for processing experimental data.
+    Main execution function for processing FACET-II experimental data.
     
-    Parses command-line arguments, loads data, processes shots, and saves results.
+    This function:
+    1. Parses command-line arguments for input/output directories
+    2. Loads experimental data (scalars and images) from input directory
+    3. Processes shots in two groups:
+       - Individual shots 1-5: One HDF5 file per shot
+       - Batch shots 6-10: Multiple shots in one HDF5 file
+    4. For each shot or batch:
+       - Creates a DataPoint2 object
+       - Adds scalar inputs (control parameters)
+       - Adds input distribution (VCC image)
+       - Adds scalar outputs (measurements grouped by location)
+       - Adds output image (screen camera)
+       - Saves to standardized HDF5 format
+    5. Creates summary_table.yaml with key parameters from all shots
+    6. Optionally combines all processed files into a single HDF5 file:
+       - Uses combine_files() to merge individual shot files
+       - Moves combined file to output directory
+       - Removes individual files to save space
+    
+    Command-line Arguments:
+        --input_dir: Directory containing FACET-II experimental data files
+                    Default: './examples/data/input/FACET-II_Experimental_Data/'
+        --output_dir: Directory for output HDF5 files and summary
+                     Default: './examples/data/output/FACET-II_Experimental_Example/'
+        --lattice_dir: Directory containing lattice files
+                      Default: './examples/data/input/FACET-II_Experimental_Data/Lattice_Files/'
+        --Combine_Files: Combine processed files into single file ('True'/'False')
+                        Default: 'True'
+    
+    Output Files:
+        - Individual HDF5 files: <output_dir>/<ID>.h5 (if Combine_Files=False)
+        - summary_table.yaml: Summary statistics and parameters from all shots
+        - Combined_Data.h5: Single merged file (if Combine_Files=True)
     """
     # Parse command-line arguments
     args = parse_args()

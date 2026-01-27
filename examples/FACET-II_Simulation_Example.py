@@ -1,4 +1,5 @@
-"""
+"""Process FACET-II Impact-T simulation archives into standardized data format.
+
 This script processes Impact simulation archives and converts them to a standardized data format.
 
 For each simulation archive (.h5 file) in the input directory, the script:
@@ -14,27 +15,43 @@ For each simulation archive (.h5 file) in the input directory, the script:
     - Simulation metadata and run information
 5. Saves each processed simulation as an HDF5 file in the output directory.
 6. Compiles a summary table of all processed simulations.
+7. Optionally combines all processed files into a single HDF5 file.
 
-Command-line arguments:
-  --input_dir: Directory containing Impact simulation archive files (.h5) [default: './examples/data/input/FACET-II_Simulation_Data/']
-  --output_dir: Directory to save processed HDF5 files and summary [default: './examples/data/output/FACET-II_Simulation_Example/']
-  --lattice_dir: Directory containing lattice files (rfdata*, ImpactT.yaml, etc.) [default: './examples/data/input/FACET-II_Simulation_Data/Lattice_Files/']
+Command-line Arguments:
+    --input_dir: Directory containing Impact simulation archive files (.h5)
+                 [default: './examples/data/input/FACET-II_Simulation_Data/']
+    --output_dir: Directory to save processed HDF5 files and summary
+                  [default: './examples/data/output/FACET-II_Simulation_Example/']
+    --lattice_dir: Directory containing lattice files (rfdata*, ImpactT.yaml, etc.)
+                   [default: './examples/data/input/FACET-II_Simulation_Data/Lattice_Files/']
+    --Combine_Files: Combine all processed files into single HDF5 file after processing
+                     [default: 'True']
 
-Required files in lattice_dir:
-- ImpactT.yaml: Template YAML file for lattice comparison
-- Lattice data files (e.g., rfdata4, rfdata5, rfdata6, rfdata7, rfdata201, rfdata102)
-
-Dependencies:
-- numpy, pandas, yaml, os, datetime, argparse
-- impact, pmd_beamphysics
-- Data_Standard_2 (providing DataPoint2, SimulatedDataPoint2)
-
-Output:
-- HDF5 files for each processed simulation in the output directory
-- summary_table.yaml: Summary of all processed simulations with key parameters and statistics
+Required Files in lattice_dir:
+    - ImpactT.yaml: Template YAML file for lattice comparison
+    - Lattice data files (e.g., rfdata4, rfdata5, rfdata6, rfdata7, rfdata201, rfdata102)
 
 Usage:
-  python FACET-II_Simulation_Example.py --input_dir <path> --output_dir <path> --lattice_dir <path>
+    # Process with default paths and combine files
+    python FACET-II_Simulation_Example.py
+    
+    # Process with custom paths without combining
+    python FACET-II_Simulation_Example.py \
+        --input_dir /path/to/archives \
+        --output_dir /path/to/output \
+        --lattice_dir /path/to/lattice \
+        --Combine_Files False
+
+Dependencies:
+    - numpy, pandas, yaml, os, datetime, argparse, shutil
+    - impact, pmd_beamphysics
+    - data_standard.SimulatedDataPoint2
+    - data_standard.combine_files
+
+Output:
+    - Individual standardized HDF5 files for each simulation (if Combine_Files=False)
+    - summary_table.yaml: Summary of all processed simulations with key parameters
+    - Combined_Data.h5: Single merged file containing all simulations (if Combine_Files=True)
 """
 
 import numpy as np
@@ -60,9 +77,14 @@ def parse_args():
     
     Returns:
         argparse.Namespace: Parsed command-line arguments containing:
-            - input_dir: Directory with Impact simulation archive files (.h5)
-            - output_dir: Directory to save processed HDF5 files and summary
-            - lattice_dir: Directory containing lattice files (rfdata*, yaml, etc.)
+            - input_dir (str): Directory with Impact simulation archive files (.h5)
+                             Default: './examples/data/input/FACET-II_Simulation_Data/'
+            - output_dir (str): Directory to save processed HDF5 files and summary
+                              Default: './examples/data/output/FACET-II_Simulation_Example/'
+            - lattice_dir (str): Directory containing lattice files (rfdata*, yaml, etc.)
+                               Default: './examples/data/input/FACET-II_Simulation_Data/Lattice_Files/'
+            - Combine_Files (str): Whether to combine all processed files ('True'/'False')
+                                 Default: 'True'
     """
     parser = argparse.ArgumentParser(description='Process Impact simulation archives into standardized data format.')
     parser.add_argument('--input_dir', type=str, default='./examples/data/input/FACET-II_Simulation_Data/',
@@ -459,23 +481,37 @@ def add_datapoints(batch_dim,
 
 def main():
     """
-    Main execution function for processing Impact simulation archives.
+    Main execution function for processing FACET-II Impact-T simulation data.
     
     This function:
-    1. Parses command-line arguments
+    1. Parses command-line arguments for input/output directories
     2. Discovers all .h5 simulation archive files in the input directory
-    3. Processes each simulation:
-       - Loads the simulation archive
-       - Compares against template to identify parameter differences
-       - Extracts run information and lattice configuration
-       - Creates standardized HDF5 output file
-    4. Compiles a summary table of all processed simulations
-    5. Saves the summary table as a YAML file
+    3. For each simulation archive:
+       - Loads Impact-T simulation data and template configuration
+       - Compares lattice elements to identify parameter variations
+       - Extracts particle distributions and simulation statistics
+       - Creates a SimulatedDataPoint2 object with all observables and metadata
+       - Saves to standardized HDF5 format
+    4. Creates summary_table.yaml with key parameters and statistics from all simulations
+    5. Optionally combines all processed files into a single HDF5 file:
+       - Uses combine_files() to merge individual simulation files
+       - Moves combined file to output directory
+       - Removes individual files to save space
     
     Command-line Arguments:
         --input_dir: Directory containing Impact .h5 archive files
+                    Default: './examples/data/input/FACET-II_Simulation_Data/'
         --output_dir: Directory for output HDF5 files and summary
+                     Default: './examples/data/output/FACET-II_Simulation_Example/'
         --lattice_dir: Directory containing lattice configuration files
+                      Default: './examples/data/input/FACET-II_Simulation_Data/Lattice_Files/'
+        --Combine_Files: Combine processed files into single file ('True'/'False')
+                        Default: 'True'
+    
+    Output Files:
+        - Individual HDF5 files: <output_dir>/<ID>.h5 (if Combine_Files=False)
+        - summary_table.yaml: Summary statistics and parameters from all simulations
+        - Combined_Data.h5: Single merged file (if Combine_Files=True)
     """
     args = parse_args()
     

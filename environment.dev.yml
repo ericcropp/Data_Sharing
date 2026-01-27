@@ -1,0 +1,13 @@
+name: data_standard_dev
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13.7
+  - numpy>=2.3.3
+  - pandas>=2.3.0
+  - h5py>=3.14
+  - pyyaml>=6.0
+  - openpmd-beamphysics>=0.10.0
+  - pip
+  - pytest>=7.0
+  - pytest-cov>=4.0

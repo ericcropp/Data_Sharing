@@ -1,5 +1,7 @@
 # Data Standard for Cross-Institution Accelerator Data
 
+[![Tests](https://github.com/ericcropp/Data_Sharing/actions/workflows/tests.yml/badge.svg)](https://github.com/ericcropp/Data_Sharing/actions/workflows/tests.yml)
+
 A minimal Python package and data standard for storing, validating, and sharing
 **simulation and experimental** datasets across institutions in a common and reproducible way.
 
@@ -9,6 +11,17 @@ Every accelerator facility produces large amounts of heterogeneous data (e.g. im
 Particularly with recent advances in machine learning (ML), a point of emphasis in the field has been to standardize techniques across labs.  This includes the in-development Particle Accelerator Lattice Standard (PALS: https://github.com/pals-project/pals), among other smaller cross-institutional ML efforts.  
 
 This project defines a **minimal, evolving standard** for storing such data, along with Python tooling to read, write, validate, and combine datasets in a consistent way. This was developed for the **DOE HEP HAAI** cross-institutional collaboration, with possible extension to larger efforts in the field.  
+
+## Features
+
+- **Flexible data dimensions**: Support for 0D scalars, 1D waveforms, 2D images, and higher-dimensional data
+- **ParticleGroup support**: Native handling of particle distribution data via `pmd_beamphysics`
+- **Batch processing**: Built-in support for multi-dimensional scans.
+- **Metadata tracking**: Lattice, simulation, and run information
+- **HDF5 storage**: Efficient, hierarchical data storage
+- **Validation utilities**: Automatic checking of data dimensions and units
+- **Combining tools**: Merge multiple data points into unified datasets
+
 
 ## Scope
 
@@ -87,18 +100,55 @@ D.finalize()
 D.saveHDF5('./output/')
 ```
 
+## Data Structure
+
+The HDF5 file structure follows this hierarchy:
+
+```
+<ID>.h5
+├── (attributes)
+│   ├── ID                          # Unique identifier
+│   ├── run_information_source      # Data source
+│   ├── run_information_date        # Timestamp
+│   ├── Data_Standard_Version       # Format version
+│   └── summary_*                   # Summary statistics
+├── lattice/
+│   ├── lattice_location           # Lattice name/URL
+│   └── lattice_files/             # Lattice configuration files
+└── observables/
+    ├── <location1>/               # Location-grouped data
+    │   ├── <observable_name>      # Dataset
+    │   └── (attributes)           # units, control, location
+    └── Type_Grouped_Data/         # Data grouped by type
+        └── <observable_name>      # Dataset with location attribute
+```
+
 ## Examples
 
-Examples are provided in the `examples/` directory, including:
+Examples are provided in the `examples/` directory:
 
-- FACET-II simulation (filename=FACET-II_Simulation_Example.py)
-- FACET-II experimental data (filename=FACET-II_Experimental_Example.py)
-- AWA experimental data (filename=AWA_Experimental_Example.py)
-
-Each example can be run after installation with:
-
+### FACET-II Simulation Data
+Processes Impact-T simulation archives with particle distributions:
 ```bash
-python examples/<filename from above>.py
+python examples/FACET-II_Simulation_Example.py \
+    --input_dir ./examples/data/input/FACET-II_Simulation_Data/ \
+    --output_dir ./examples/data/output/FACET-II_Simulation_Example/
+```
+
+### FACET-II Experimental Data
+Converts EPICS-based experimental data:
+```bash
+python examples/FACET-II_Experimental_Example.py \
+    --input_dir ./examples/data/input/FACET-II_Experimental_Data/ \
+    --output_dir ./examples/data/output/FACET-II_Experimental_Example/
+```
+
+### AWA Experimental Data
+Processes AWA facility data with waveforms and images:
+```bash
+python examples/AWA_Experimental_Example.py \
+    --input_file ./examples/data/input/AWA_Experimental_Data/DYG12_1759956735.h5 \
+    --output_dir ./examples/data/output/AWA_Experimental_Example/
 ```
 
 ## API Stability
@@ -109,10 +159,30 @@ minor versions.
 Internal module structure may change as the standard evolves. Users should rely
 only on documented imports from the top-level package.
 
-## Development
+## Testing
 
-Run tests with:
-
+Run all tests:
 ```bash
-python -m pytest tests/ 
+pytest tests/
 ```
+
+Run only fast tests (API imports):
+```bash
+pytest tests/ -m "not slow"
+```
+
+Run only integration tests:
+```bash
+pytest tests/ -m "slow"
+```
+
+## Contributing
+
+This standard is under active development. Contributions and suggestions are welcome.
+
+To contribute:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Submit a pull request
+

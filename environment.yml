@@ -1,0 +1,12 @@
+name: data_standard
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13.7
+  - numpy=2.3.3
+  - pandas=2.3.3
+  - h5py=3.14.0
+  - pyyaml=6.0.3
+  - openpmd-beamphysics=0.10.2
+  - pip=25.2
+    

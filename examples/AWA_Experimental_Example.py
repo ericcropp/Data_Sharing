@@ -16,21 +16,37 @@ Main Steps:
    - Images: feature_dims=2 (2D arrays)
 5. Add lattice information and run metadata
 6. Save each processed file to HDF5 format
+7. Optionally combine all processed files into a single HDF5 file
 
 Command-line Arguments:
-    --input_dir: Directory containing AWA .h5 files [default: 'Ex_AWA_Data']
-    --output_dir: Directory to save processed files [default: './AWA_Example/']
-    --lattice_dir: Directory containing lattice files [default: 'Lattice_Files']
+    --input_dir: Directory containing AWA .h5 files
+                 [default: './examples/data/input/AWA_Experimental_Data/']
+    --output_dir: Directory to save processed files
+                  [default: './examples/data/output/AWA_Experimental_Example/']
+    --lattice_dir: Directory containing lattice files
+                   [default: './examples/data/input/AWA_Experimental_Data/Lattice_Files/']
+    --Combine_Files: Combine all processed files into single HDF5 file after processing
+                     [default: 'True']
 
 Usage:
-    python Argonne_Example.py --input_dir <path> --output_dir <path>
+    # Process with default paths and combine files
+    python AWA_Experimental_Example.py
+    
+    # Process with custom paths without combining
+    python AWA_Experimental_Example.py \
+        --input_dir /path/to/data \
+        --output_dir /path/to/output \
+        --Combine_Files False
 
 Dependencies:
-    - numpy, pandas, h5py, yaml, argparse
-    - Data_Standard_2.DataPoint2
+    - numpy, pandas, h5py, yaml, argparse, shutil
+    - data_standard.DataPoint2
+    - data_standard.combine_files
 
 Output:
-    - Standardized HDF5 files for each input file in the output directory
+    - Individual standardized HDF5 files for each input file (if Combine_Files=False)
+    - summary_table.yaml containing summary statistics from all files
+    - Combined_Data.h5 single merged file (if Combine_Files=True)
 """
 
 import numpy as np
@@ -58,9 +74,14 @@ def parse_args():
     
     Returns:
         argparse.Namespace: Parsed command-line arguments containing:
-            - input_dir: Directory with AWA experimental archive files (.h5)
-            - output_dir: Directory to save processed HDF5 files and summary
-            - lattice_dir: Directory containing lattice files (rfdata*, yaml, etc.)
+            - input_dir (str): Directory with AWA experimental archive files (.h5)
+                             Default: './examples/data/input/AWA_Experimental_Data/'
+            - output_dir (str): Directory to save processed HDF5 files and summary
+                              Default: './examples/data/output/AWA_Experimental_Example/'
+            - lattice_dir (str): Directory containing lattice files (rfdata*, yaml, etc.)
+                               Default: './examples/data/input/AWA_Experimental_Data/Lattice_Files/'
+            - Combine_Files (str): Whether to combine all processed files ('True'/'False')
+                                 Default: 'True'
     """
     parser = argparse.ArgumentParser(description='Process AWA experimental data into standardized format.')
     parser.add_argument('--input_dir', type=str, default='./examples/data/input/AWA_Experimental_Data/',
@@ -178,7 +199,7 @@ def main():
     Main execution function for processing AWA experimental data.
     
     This function:
-    1. Parses command-line arguments
+    1. Parses command-line arguments for input/output directories
     2. Discovers all .h5 files in the input directory
     3. For each file:
        - Loads all datasets from the HDF5 file
@@ -186,11 +207,26 @@ def main():
        - Classifies and adds observables by type (scalar, waveform, or image)
        - Adds lattice information and metadata
        - Saves to standardized HDF5 format
+    4. Creates a summary_table.yaml with statistics from all processed files
+    5. Optionally combines all processed files into a single HDF5 file:
+       - Uses combine_files() to merge individual files
+       - Moves combined file to output directory
+       - Removes individual files to save space
     
     Command-line Arguments:
         --input_dir: Directory containing AWA .h5 files
+                    Default: './examples/data/input/AWA_Experimental_Data/'
         --output_dir: Directory for output HDF5 files
+                     Default: './examples/data/output/AWA_Experimental_Example/'
         --lattice_dir: Directory containing lattice files
+                      Default: './examples/data/input/AWA_Experimental_Data/Lattice_Files/'
+        --Combine_Files: Combine processed files into single file ('True'/'False')
+                        Default: 'True'
+    
+    Output Files:
+        - Individual HDF5 files: <output_dir>/<ID>.h5 (if Combine_Files=False)
+        - summary_table.yaml: Summary statistics from all files
+        - Combined_Data.h5: Single merged file (if Combine_Files=True)
     """
     # Parse command-line arguments
     args = parse_args()
