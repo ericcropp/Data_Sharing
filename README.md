@@ -146,7 +146,7 @@ The HDF5 file structure follows this hierarchy:
 │   ├── lattice_location           # Lattice name/URL
 │   └── lattice_files/             # Lattice configuration files
 └── observables/
-    ├── <location1>/               # Location-grouped data
+    ├── <location>/               # Location-grouped data
     │   ├── <observable_name>      # Dataset
     │   └── (attributes)           # units, control, location
     └── Type_Grouped_Data/         # Data grouped by type
