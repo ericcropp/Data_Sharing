@@ -579,13 +579,25 @@ def main():
     # Combine files into a single HDF5 file
     if args.Combine_Files.lower() == 'true':
         print("Combining processed files into a single HDF5 file...")
-        combine_files(args.output_dir, os.path.join(os.path.dirname(os.path.dirname(args.output_dir)), 'Combined_Data.h5'))
-
-        print("Combined file created successfully.")
-        shutil.rmtree(args.output_dir)
-
-        os.makedirs(args.output_dir, exist_ok=True)
-        shutil.move(os.path.join(os.path.dirname(os.path.dirname(args.output_dir)), 'Combined_Data.h5'), os.path.join(args.output_dir, 'Combined_Data.h5'))
+        
+        # Get list of individual HDF5 files before combining
+        individual_files = [f for f in os.listdir(args.output_dir) 
+                          if f.endswith('.h5') and f != 'Combined_Data.h5']
+        
+        # Create combined file in output directory
+        combined_path = os.path.join(args.output_dir, 'Combined_Data.h5')
+        combine_files(args.output_dir, combined_path)
+        
+        # Delete individual files, keeping only Combined_Data.h5 and summary_table.yaml
+        for filename in individual_files:
+            file_path = os.path.join(args.output_dir, filename)
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+        
+        print(f"Combined file created at {combined_path}")
+        print(f"Removed {len(individual_files)} individual files")
     
 if __name__ == '__main__':
     main()
