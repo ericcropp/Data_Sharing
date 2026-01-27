@@ -16,6 +16,7 @@ import os
 import yaml
 import h5py
 import argparse
+import numpy as np
 
 
 def copy_file_into_group(src_file: h5py.File,
@@ -102,6 +103,7 @@ def combine_files(input_dir: str, output_h5: str):
 
         # Store the summary as a single attribute table on the summary_yaml group
         # Write summary information as attributes
+        shots_per_id_stored = False
         for key in summary[0].keys():
             if key == 'ID':
                 out_f.attrs['IDs'] = [entry.get('ID') for entry in summary]
@@ -111,14 +113,22 @@ def combine_files(input_dir: str, output_h5: str):
                 
                 # Check if all values are lists
                 if all(isinstance(v, list) for v in values):
-                    # Flatten all lists into a single list
+                    # Flatten all lists into a single list and track shots per ID (once)
                     flattened = []
+                    if not shots_per_id_stored:
+                        shots_per_id = []
                     for val_list in values:
+                        if not shots_per_id_stored:
+                            shots_per_id.append(len(val_list))
                         flattened.extend(val_list)
                     try:
                         out_f.attrs[key] = np.array(flattened)
                     except:
                         out_f.attrs[key] = flattened
+                    # Store shots per ID once for all list-valued keys
+                    if not shots_per_id_stored:
+                        out_f.attrs["shots_per_ID"] = shots_per_id
+                        shots_per_id_stored = True
                 elif all(isinstance(v, (int, float)) for v in values):
                     # Numeric values - store as array
                     try:
