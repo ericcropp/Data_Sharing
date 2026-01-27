@@ -454,9 +454,9 @@ def add_datapoints(batch_dim,
         if not units:  # If still None or blank, set default
             units = "unitless"
         scalar_inputs[col] = {
-            "name": col,
+            "name": col.split(':')[1] if ':' in col else col,  # Use subkey as name if available
             "value": master_dict[col],
-            "location": col,
+            "location": col.split(':')[0],  # Use element name as location
             "units": units,
             "description": ""   # Fill in description if available
         }
