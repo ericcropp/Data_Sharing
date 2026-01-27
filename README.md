@@ -1,4 +1,4 @@
-# Data Standard for Cross-Institution Accelerator Data
+# Data Standard for Cross-Institution Accelerator Data Sharing
 
 [![Tests](https://github.com/ericcropp/Data_Sharing/actions/workflows/tests.yml/badge.svg)](https://github.com/ericcropp/Data_Sharing/actions/workflows/tests.yml)
 
