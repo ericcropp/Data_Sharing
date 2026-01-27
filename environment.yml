@@ -9,4 +9,6 @@ dependencies:
   - pyyaml=6.0.3
   - openpmd-beamphysics=0.10.2
   - pip=25.2
+  - lume-impact=0.10.2
+  
     

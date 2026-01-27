@@ -50,6 +50,7 @@ git clone https://github.com/ericcropp/Data_Sharing.git
 cd Data_Sharing
 conda env create -f environment.yml
 conda activate data_standard
+pip install -e .
 ```
 
 For development, use the development env:
@@ -57,9 +58,17 @@ For development, use the development env:
 git clone https://github.com/ericcropp/Data_Sharing.git
 cd Data_Sharing
 conda env create -f environment.dev.yml
-conda activate data_standard
+conda activate data_standard_dev
+pip install -e .
 ```
 
+## Development
+
+For development and testing, install the package in editable mode:
+
+```bash
+pip install -e .
+```
 
 ## Quickstart
 
