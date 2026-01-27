@@ -141,7 +141,7 @@ The HDF5 file structure follows this hierarchy:
 │   ├── run_information_source      # Data source
 │   ├── run_information_date        # Timestamp
 │   ├── Data_Standard_Version       # Format version
-│   └── <summary>_*                 # Summary statistics
+│   └── <summary>                   # Summary statistics
 ├── lattice/
 │   ├── lattice_location           # Lattice name/URL
 │   └── lattice_files/             # Lattice configuration files
