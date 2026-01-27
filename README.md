@@ -1,29 +1,118 @@
-# Data_Sharing
-Standardized format for storing simulation and measured data
+# Data Standard for Cross-Institution Accelerator Data
 
-## Overview
-The **Data_Sharing** project provides a unified format for storing both simulation and measured data. This standard aims to facilitate data sharing and interoperability across different tools, workflows, and institutions. Includes:
-- Consistent data organization
-- Support for multiple data types (e.g., ParticleGroups, scalars, images, metadata) and simulations AND experimental data
-- Extensible format for future requirements
+A minimal Python package and data standard for storing, validating, and sharing
+**simulation and experimental** datasets across institutions in a common and reproducible way.
 
-Examples for formatting FACET-II experimental data are contained in **Experiment2DataStandard2.py**
+## Motivation
+Every accelerator facility produces large amounts of heterogeneous data (e.g. images, scalars, waveforms), including simulation outputs and experiemntal measurements.  Historically, each institution (or group within an institution) has its own ad-hoc structure for data, which impedes cross-institutional collaboration.  At best, it requires writing translators between formats and at worst, it leads to siloed research and solutions that cannot be extended to other institutions.  
 
-Examples for formatting simulations of the same beamline, using a custom lattice (so lattice is included) are shown in **Lume2DataStandard2.py**
+Particularly with recent advances in machine learning (ML), a point of emphasis in the field has been to standardize techniques across labs.  This includes the in-development Particle Accelerator Lattice Standard (PALS: https://github.com/pals-project/pals), among other smaller cross-institutional ML efforts.  
 
-The results of the real data example are shown in **Test_Data2/**
+This project defines a **minimal, evolving standard** for storing such data, along with Python tooling to read, write, validate, and combine datasets in a consistent way. This was developed for the **DOE HEP HAAI** cross-institutional collaboration, with possible extension to larger efforts in the field.  
 
-The results of the simulated data example are shown in **Test_Sim_Data2/**
+## Scope
 
-The standard data classes are found in **Data_Standard_2.py**
+This project has been left intentionally minimal.
 
-The data used for making experimental and simulation examples are in **Ex_Experimental_Data2/** and **Ex_Simulation_Data2/**, respectively
+**What it provides**
+- A small set of standardized data structures for accelerator lattices (to be replaced by PALS) and observables
+- Validation utilities
+- HDF5-based storage conventions
+- Reference examples for three cases:
+    - FACET-II Simulation Data
+    - FACET-II Experimental Data
+    - AWA Experimental Data
 
-For making batch-level HDF5 files, use **Combine_Files.py** with first command line argument as the input directory, and the second the output directory
+**What it does not try to be**
+- A universal standard for all experiments
+- A frozen or finalized standard
+- A full analysis or visualization framework
 
-The beginnings of a more formal standard are seen in **Definitions.md**
+**The standard is expected to evolve as collaboration needs change.**
 
-History note:
-On 2026-01-25 the repository history was rewritten to migrate large binary
-artifacts to Git LFS. Commit hashes prior to this date changed, but all code
-history was preserved.
+## Installation
+
+```bash
+git clone https://github.com/ericcropp/Data_Sharing.git
+cd Data_Sharing
+conda env create -f environment.yml
+conda activate data_standard
+```
+
+For development, use the development env:
+```bash
+git clone https://github.com/ericcropp/Data_Sharing.git
+cd Data_Sharing
+conda env create -f environment.dev.yml
+conda activate data_standard
+```
+
+
+## Quickstart
+
+```python
+from data_standard import DataPoint2, SimulatedDataPoint2, validate_file
+
+# Create a data point
+D = DataPoint2()
+
+# Add a scalar observable (e.g., beam charge)
+D.add_observable(
+    batch_dims=0,
+    feature_dims=0,  # scalar
+    location=['ICT1'],
+    data=np.array([250.0]),  # pC
+    data_names=['charge'],
+    units='pC',
+    control=False
+)
+
+# Add a 2D image (e.g., screen image)
+D.add_observable(
+    batch_dims=0,
+    feature_dims=2,  # 2D image
+    location=['Screen1'],
+    data=image_array,
+    data_names=['image'],
+    units='counts',
+    attrs={'pxcal': 1e-6}  # pixel calibration
+)
+
+# Add lattice and metadata
+D.add_lattice(lattice_location='FACET-II')
+D.add_run_information(source='FACET-II', date='2025-01-26', notes='Example run')
+
+# Finalize and save
+D.finalize()
+D.saveHDF5('./output/')
+```
+
+## Examples
+
+Examples are provided in the `examples/` directory, including:
+
+- FACET-II simulation (filename=FACET-II_Simulation_Example.py)
+- FACET-II experimental data (filename=FACET-II_Experimental_Example.py)
+- AWA experimental data (filename=AWA_Experimental_Example.py)
+
+Each example can be run after installation with:
+
+```bash
+python examples/<filename from above>.py
+```
+
+## API Stability
+
+The public API exposed via `data_standard` is intended to remain stable within
+minor versions.
+
+Internal module structure may change as the standard evolves. Users should rely
+only on documented imports from the top-level package.
+
+## Development
+
+Run tests with:
+
+```bash
+python -m pytest tests/ 
+```
