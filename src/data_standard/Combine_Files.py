@@ -84,9 +84,18 @@ def combine_files(input_dir: str, output_h5: str):
         # Add summary YAML as a top-level group
         top_groups = [name for name in out_f.keys() if isinstance(out_f[name], h5py.Group)]
         i = 0
+        first_group_name = None
         for grp_name in top_groups:
             if i == 0:
+                first_group_name = grp_name
                 out_f.move(grp_name + '/lattice', '/lattice')
+                
+                # Copy run_information and other common metadata from first file to root
+                first_group = out_f[grp_name]
+                for attr_name in ['run_information_source', 'run_information_date', 
+                                'run_information_notes', 'Data_Standard_Version']:
+                    if attr_name in first_group.attrs:
+                        out_f.attrs[attr_name] = first_group.attrs[attr_name]
             else:
                 del out_f[grp_name + '/lattice']  # TO DO: Check that lattice is the same for all files
             i += 1
@@ -102,29 +111,23 @@ def combine_files(input_dir: str, output_h5: str):
                 
                 # Check if all values are lists
                 if all(isinstance(v, list) for v in values):
-                    # Flatten all lists and store with indexed attributes
-                    idx_counter = 0
-                    shot_counts = []
-                    for file_idx, val_list in enumerate(values):
-                        shot_counts.append(len(val_list))
-                        for shot_idx, item in enumerate(val_list):
-                            try:
-                                out_f.attrs[f"{key}_{idx_counter}"] = float(item)
-                            except (ValueError, TypeError):
-                                out_f.attrs[f"{key}_{idx_counter}"] = str(item)
-                            idx_counter += 1
-                    # Store metadata about the structure
-                    out_f.attrs[f"{key}_shots_per_file"] = shot_counts
-                    out_f.attrs[f"{key}_total_shots"] = idx_counter
-                elif all(isinstance(v, (int, float, str)) for v in values):
-                    # Simple scalars - can store as array
+                    # Flatten all lists into a single list
+                    flattened = []
+                    for val_list in values:
+                        flattened.extend(val_list)
+                    try:
+                        out_f.attrs[key] = np.array(flattened)
+                    except:
+                        out_f.attrs[key] = flattened
+                elif all(isinstance(v, (int, float)) for v in values):
+                    # Numeric values - store as array
                     try:
                         out_f.attrs[key] = np.array(values)
                     except:
-                        out_f.attrs[key] = [str(v) for v in values]
+                        out_f.attrs[key] = values
                 else:
-                    # Mixed types - store as strings
-                    out_f.attrs[key] = [str(v) for v in values]
+                    # Store as list (handles strings and mixed types)
+                    out_f.attrs[key] = values
 
     # print(f"Combined file written to {output_h5}")
 

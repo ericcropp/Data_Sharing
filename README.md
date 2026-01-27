@@ -6,7 +6,7 @@ A minimal Python package and data standard for storing, validating, and sharing
 **simulation and experimental** datasets across institutions in a common and reproducible way.
 
 ## Motivation
-Every accelerator facility produces large amounts of heterogeneous data (e.g. images, scalars, waveforms), including simulation outputs and experiemntal measurements.  Historically, each institution (or group within an institution) has its own ad-hoc structure for data, which impedes cross-institutional collaboration.  At best, it requires writing translators between formats and at worst, it leads to siloed research and solutions that cannot be extended to other institutions.  
+Every accelerator facility produces large amounts of heterogeneous data (e.g. images, scalars, waveforms), including simulation outputs and experimental measurements.  Historically, each institution (or group within an institution) has its own ad-hoc structure for data, which impedes cross-institutional collaboration.  At best, it requires writing translators between formats and at worst, it leads to siloed research and solutions that cannot be extended to other institutions.  
 
 Particularly with recent advances in machine learning (ML), a point of emphasis in the field has been to standardize techniques across labs.  This includes the in-development Particle Accelerator Lattice Standard (PALS: https://github.com/pals-project/pals), among other smaller cross-institutional ML efforts.  
 
@@ -93,7 +93,8 @@ pip install -e .
 ## Quickstart
 
 ```python
-from data_standard import DataPoint2, SimulatedDataPoint2, validate_file
+from data_standard import DataPoint2, SimulatedDataPoint2
+import numpy as np
 
 # Create a data point
 D = DataPoint2()
@@ -110,6 +111,7 @@ D.add_observable(
 )
 
 # Add a 2D image (e.g., screen image)
+image_array = np.zeros((100,200))
 D.add_observable(
     batch_dims=0,
     feature_dims=2,  # 2D image
@@ -121,7 +123,7 @@ D.add_observable(
 )
 
 # Add lattice and metadata
-D.add_lattice(lattice_location='FACET-II')
+D.add_lattice(lattice_location='https://github.com/slaclab/facet2-lattice')
 D.add_run_information(source='FACET-II', date='2025-01-26', notes='Example run')
 
 # Finalize and save
@@ -140,7 +142,7 @@ The HDF5 file structure follows this hierarchy:
 │   ├── run_information_source      # Data source
 │   ├── run_information_date        # Timestamp
 │   ├── Data_Standard_Version       # Format version
-│   └── summary_*                   # Summary statistics
+│   └── <summary>_*                 # Summary statistics
 ├── lattice/
 │   ├── lattice_location           # Lattice name/URL
 │   └── lattice_files/             # Lattice configuration files
