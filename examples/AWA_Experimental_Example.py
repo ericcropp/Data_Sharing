@@ -34,7 +34,7 @@ Output:
 """
 
 import numpy as np
-from Data_Standard_2 import DataPoint2   
+from data_standard.Data_Standard_2 import DataPoint2
 import pandas as pd
 import os
 import yaml
@@ -61,11 +61,11 @@ def parse_args():
             - lattice_dir: Directory containing lattice files (rfdata*, yaml, etc.)
     """
     parser = argparse.ArgumentParser(description='Process AWA experimental data into standardized format.')
-    parser.add_argument('--input_dir', type=str, default='Ex_AWA_Data',
-                        help='Directory containing AWA experimental archive files (.h5)')
-    parser.add_argument('--output_dir', type=str, default='./AWA_Example/',
+    parser.add_argument('--input_dir', type=str, default='./examples/data/input/AWA_Experimental_Data/',
+                        help='Directory containing AWA experimental data files')
+    parser.add_argument('--output_dir', type=str, default='./examples/data/output/AWA_Experimental_Example/',
                         help='Directory to save processed HDF5 files and summary')
-    parser.add_argument('--lattice_dir', type=str, default='Lattice_Files',
+    parser.add_argument('--lattice_dir', type=str, default='./examples/data/input/AWA_Experimental_Data/Lattice_Files/',
                         help='Directory containing lattice files (rfdata*, yaml, etc.)')
     return parser.parse_args()
 
@@ -197,7 +197,6 @@ def main():
     print(f"Processing AWA data files from {args.input_dir}...")
     
     # Process each HDF5 file
-    # Process each HDF5 file
     for file in files:
         if file.endswith('.h5'):
             print(f"\n  Processing file: {file}")
@@ -206,8 +205,6 @@ def main():
             with h5py.File(os.path.join(args.input_dir, file), 'r') as f:
                 for key in f.keys():
                     data_dict[key] = np.array(f[key])
-            
-            print(f"    Loaded {len(data_dict)} datasets")
             
             # Create new data point object for this file
             D = DataPoint2()
@@ -255,12 +252,17 @@ def main():
                         location_primary=True,
                         control=control_keys[key]
                     )
-        D.add_lattice(lattice_location=lattice_location)    
+            D.add_lattice(lattice_location=lattice_location)    
 
-        D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
-        D.finalize()
-        D.add_summary(summary_keys, summary_location='final')
+            D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
+            D.finalize()
+            D.add_summary(summary_keys, summary_location='final')
 
-        os.makedirs(args.output_dir, exist_ok=True)
-        # Save data point to HDF5
-        D.saveHDF5(args.output_dir)
+            os.makedirs(args.output_dir, exist_ok=True)
+            # Save data point to HDF5
+            D.saveHDF5(args.output_dir)
+
+    print(f"\nProcessing complete. Processed {len([f for f in files if f.endswith('.h5')])} files.")
+
+if __name__ == '__main__':
+    main()

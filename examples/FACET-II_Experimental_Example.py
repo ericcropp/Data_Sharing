@@ -43,7 +43,7 @@ Usage:
 """
 
 import numpy as np
-from Data_Standard_2 import DataPoint2   
+from data_standard.Data_Standard_2 import DataPoint2
 import pandas as pd
 import os
 import yaml
@@ -60,11 +60,11 @@ def parse_args():
             - lattice_dir: Directory containing lattice files (rfdata*, yaml, etc.)
     """
     parser = argparse.ArgumentParser(description='Process FACET-II experimental data into standardized format.')
-    parser.add_argument('--input_dir', type=str, default='Ex_Experimental_Data2',
+    parser.add_argument('--input_dir', type=str, default='./examples/data/input/FACET-II_Experimental_Data/',
                         help='Directory containing FACET-II experimental data files')
-    parser.add_argument('--output_dir', type=str, default='./Test_Data2/',
+    parser.add_argument('--output_dir', type=str, default='./examples/data/output/FACET-II_Experimental_Example/',
                         help='Directory to save processed HDF5 files and summary')
-    parser.add_argument('--lattice_dir', type=str, default='Lattice_Files',
+    parser.add_argument('--lattice_dir', type=str, default='./examples/data/input/FACET-II_Experimental_Data/Lattice_Files/',
                         help='Directory containing lattice files (rfdata*, yaml, etc.)')
     return parser.parse_args()
 
@@ -212,54 +212,54 @@ scalar_output_cols = {
     'QUAD:IN10:525:BACT': 'kG',
     # BPM X positions
     'BPMS:IN10:221:X': 'mm',
- 'BPMS:IN10:371:X': 'mm',
- 'BPMS:IN10:425:X': 'mm',
- 'BPMS:IN10:511:X': 'mm',
- 'BPMS:IN10:525:X': 'mm',
- 'BPMS:IN10:581:X': 'mm',
- 'BPMS:IN10:631:X': 'mm',
- 'BPMS:IN10:651:X': 'mm',
- 'BPMS:IN10:731:X': 'mm',
- 'BPMS:IN10:771:X': 'mm',
- 'BPMS:IN10:781:X': 'mm',
- 'BPMS:IN10:221:Y': 'mm',
- 'BPMS:IN10:371:Y': 'mm',
- 'BPMS:IN10:425:Y': 'mm',
- 'BPMS:IN10:511:Y': 'mm',
- 'BPMS:IN10:525:Y': 'mm',
- 'BPMS:IN10:581:Y': 'mm',
- 'BPMS:IN10:631:Y': 'mm',
- 'BPMS:IN10:651:Y': 'mm',
- 'BPMS:IN10:731:Y': 'mm',
- 'BPMS:IN10:771:Y': 'mm',
- 'BPMS:IN10:781:Y': 'mm',
- 'BPMS:IN10:221:TMIT': 'unitless',
- 'BPMS:IN10:371:TMIT': 'unitless',
- 'BPMS:IN10:425:TMIT': 'unitless',
- 'BPMS:IN10:511:TMIT': 'unitless',
- 'BPMS:IN10:525:TMIT': 'unitless',
- 'BPMS:IN10:581:TMIT': 'unitless',
- 'BPMS:IN10:631:TMIT': 'unitless',
- 'BPMS:IN10:651:TMIT': 'unitless',
- 'BPMS:IN10:731:TMIT': 'unitless',
- 'BPMS:IN10:771:TMIT': 'unitless',
- 'BPMS:IN10:781:TMIT': 'unitless',
- 'TORO:IN10:591:TMIT_PC': 'pC',
- 'TORO:IN10:791:TMIT_PC': 'pC',
-  'CAMR:LT10:900:XRMS': 'mm',
- 'CAMR:LT10:900:YRMS': 'mm',
- 'CAMR:LT10:900:X': 'mm',
- 'CAMR:LT10:900:Y': 'mm',
- 'PROF:IN10:571:XRMS': 'mm',
- 'PROF:IN10:571:YRMS': 'mm',
- 'PROF:IN10:571:X': 'mm',
- 'PROF:IN10:571:Y': 'mm',
- 'LASR:LT10:930:PWR': 'MW',
- 'PMTR:HT10:950:PWR': 'MW',
- 'IOC:SYS1:MP01:LSHUTCTL': 'unitless',
-#  'KLYS:LI10:51:PDES': 'unitless',
-#  'KLYS:LI10:51:AMPL': 'unitless',
- 'TCAV:IN20:490:TC0_C_1_TCTL': 'unitless'}
+    'BPMS:IN10:371:X': 'mm',
+    'BPMS:IN10:425:X': 'mm',
+    'BPMS:IN10:511:X': 'mm',
+    'BPMS:IN10:525:X': 'mm',
+    'BPMS:IN10:581:X': 'mm',
+    'BPMS:IN10:631:X': 'mm',
+    'BPMS:IN10:651:X': 'mm',
+    'BPMS:IN10:731:X': 'mm',
+    'BPMS:IN10:771:X': 'mm',
+    'BPMS:IN10:781:X': 'mm',
+    'BPMS:IN10:221:Y': 'mm',
+    'BPMS:IN10:371:Y': 'mm',
+    'BPMS:IN10:425:Y': 'mm',
+    'BPMS:IN10:511:Y': 'mm',
+    'BPMS:IN10:525:Y': 'mm',
+    'BPMS:IN10:581:Y': 'mm',
+    'BPMS:IN10:631:Y': 'mm',
+    'BPMS:IN10:651:Y': 'mm',
+    'BPMS:IN10:731:Y': 'mm',
+    'BPMS:IN10:771:Y': 'mm',
+    'BPMS:IN10:781:Y': 'mm',
+    'BPMS:IN10:221:TMIT': 'unitless',
+    'BPMS:IN10:371:TMIT': 'unitless',
+    'BPMS:IN10:425:TMIT': 'unitless',
+    'BPMS:IN10:511:TMIT': 'unitless',
+    'BPMS:IN10:525:TMIT': 'unitless',
+    'BPMS:IN10:581:TMIT': 'unitless',
+    'BPMS:IN10:631:TMIT': 'unitless',
+    'BPMS:IN10:651:TMIT': 'unitless',
+    'BPMS:IN10:731:TMIT': 'unitless',
+    'BPMS:IN10:771:TMIT': 'unitless',
+    'BPMS:IN10:781:TMIT': 'unitless',
+    'TORO:IN10:591:TMIT_PC': 'pC',
+    'TORO:IN10:791:TMIT_PC': 'pC',
+    'CAMR:LT10:900:XRMS': 'mm',
+    'CAMR:LT10:900:YRMS': 'mm',
+    'CAMR:LT10:900:X': 'mm',
+    'CAMR:LT10:900:Y': 'mm',
+    'PROF:IN10:571:XRMS': 'mm',
+    'PROF:IN10:571:YRMS': 'mm',
+    'PROF:IN10:571:X': 'mm',
+    'PROF:IN10:571:Y': 'mm',
+    'LASR:LT10:930:PWR': 'MW',
+    'PMTR:HT10:950:PWR': 'MW',
+    'IOC:SYS1:MP01:LSHUTCTL': 'unitless',
+    #  'KLYS:LI10:51:PDES': 'unitless',
+    #  'KLYS:LI10:51:AMPL': 'unitless',
+    'TCAV:IN20:490:TC0_C_1_TCTL': 'unitless'}
 
 # ========================================
 # Summary configuration

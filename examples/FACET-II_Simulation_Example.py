@@ -40,7 +40,7 @@ Usage:
 import numpy as np
 
 
-from Data_Standard_2 import DataPoint2, SimulatedDataPoint2
+from data_standard.Data_Standard_2 import SimulatedDataPoint2
 
 import pandas as pd
 import os
@@ -63,16 +63,13 @@ def parse_args():
             - lattice_dir: Directory containing lattice files (rfdata*, yaml, etc.)
     """
     parser = argparse.ArgumentParser(description='Process Impact simulation archives into standardized data format.')
-    parser.add_argument('--input_dir', type=str, default='Ex_Simulation_Data2',
-                        help='Directory containing Impact simulation archive files (.h5)')
-    parser.add_argument('--output_dir', type=str, default='./Test_Sim_Data2/',
+    parser.add_argument('--input_dir', type=str, default='./examples/data/input/FACET-II_Simulation_Data/',
+                        help='Directory containing FACET-II experimental data files')
+    parser.add_argument('--output_dir', type=str, default='./examples/data/output/FACET-II_Simulation_Example/',
                         help='Directory to save processed HDF5 files and summary')
-    parser.add_argument('--lattice_dir', type=str, default='Lattice_Files',
+    parser.add_argument('--lattice_dir', type=str, default='./examples/data/input/FACET-II_Simulation_Data/Lattice_Files/',
                         help='Directory containing lattice files (rfdata*, yaml, etc.)')
     return parser.parse_args()
-
-# Load the list of simulation archive filenames from YAML
-impact_filenames = {'impact_archive': [os.path.join('Ex_Simulation_Data2', fname) for fname in os.listdir('Ex_Simulation_Data2') if fname.endswith('.h5')]}
 
 summary_table = []
 
@@ -478,6 +475,10 @@ def main():
         --lattice_dir: Directory containing lattice configuration files
     """
     args = parse_args()
+    
+    # Load the list of simulation archive filenames from YAML
+    impact_filenames = {'impact_archive': [os.path.join(args.input_dir, fname) for fname in os.listdir(args.input_dir) if fname.endswith('.h5')]}
+
     
     # Discover all Impact simulation archive files (.h5) in the input directory
     impact_filenames = {

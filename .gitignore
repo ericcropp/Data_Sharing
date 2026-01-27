@@ -3,3 +3,6 @@ test_sim.ipynb
 __pycache__/
 .ipynb_checkpoints/
 Old/
+examples/data/output/*
+!examples/data/output/.gitkeep
+*.egg-info/
