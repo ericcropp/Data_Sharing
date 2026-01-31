@@ -19,11 +19,12 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
-      with:
-        lfs: true
+      # LFS temporarily disabled due to quota - integration tests will be skipped
+      # with:
+      #   lfs: true
     
-    - name: Checkout LFS objects
-      run: git lfs pull
+    # - name: Checkout LFS objects
+    #   run: git lfs pull
     
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
@@ -55,11 +56,12 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
-      with:
-        lfs: true
+      # LFS temporarily disabled due to quota
+      # with:
+      #   lfs: true
     
-    - name: Checkout LFS objects
-      run: git lfs pull
+    # - name: Checkout LFS objects
+    #   run: git lfs pull
     
     - name: Setup Miniforge
       uses: conda-incubator/setup-miniconda@v3
