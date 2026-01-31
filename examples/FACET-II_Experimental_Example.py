@@ -348,11 +348,17 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
     # Populate scalar inputs for this shot
     for col in input_cols.keys():
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)
-
+        # For single shots (batch_dim=0), extract scalar value; for batches, keep as array
+        if batch_dim == 0:
+            col_data = col_data[0]
+        
         D.add_observable(batch_dims=batch_dim, feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=input_cols[col], data_names=':'.join(col.split(':')[3:]),location_primary=True,control=True)
     for col in scalar_output_cols.keys():
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)
-
+        # For single shots (batch_dim=0), extract scalar value; for batches, keep as array
+        if batch_dim == 0:
+            col_data = col_data[0]
+        
         D.add_observable(batch_dims=batch_dim, feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=scalar_output_cols[col], data_names=':'.join(col.split(':')[3:]),location_primary=True,control=False)
 
     # Add lattice information and device location mapping
@@ -374,9 +380,17 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
     D.saveHDF5(output_dir)
     
     # Extract summary data and append to summary table for cross-shot analysis
-    entry = {
-        **D.summary.summary
-    }
+    # Convert numpy types to Python native types for YAML compatibility
+    entry = {}
+    for key, value in D.summary.summary.items():
+        if isinstance(value, np.ndarray):
+            entry[key] = value.tolist()
+        elif isinstance(value, (np.integer, np.floating)):
+            entry[key] = value.item()
+        elif isinstance(value, list):
+            entry[key] = [v.item() if isinstance(v, (np.integer, np.floating)) else v for v in value]
+        else:
+            entry[key] = value
     summary_table.append(entry)
     
     return D, summary_table
@@ -434,10 +448,10 @@ def main():
     # Process first 5 shots individually (one file per shot)
     print("\nProcessing individual shots (1-5)...")
     for i in range(5):
-        # Extract data for shot i with singleton shot dimension for consistency
-        VCC = VCC_all[i:i+1, :, :]  # Shape: (1, height, width)
+        # Extract data for shot i as 2D images (no shot dimension)
+        VCC = VCC_all[i, :, :]  # Shape: (height, width)
         data_subset = all_data.loc[[i]]  # DataFrame with one row
-        image_subset = all_images[i:i+1, :, :]  # Shape: (1, height, width)
+        image_subset = all_images[i, :, :]  # Shape: (height, width)
         
         # Process and save this shot
         D, summary_table = add_datapoints(
@@ -464,7 +478,7 @@ def main():
     image_subset = all_images[5:10, :, :]  # Shape: (5, height, width)
     
     D, summary_table = add_datapoints(
-        batch_dim=0,  # Still no batching at the batch_dims level (shots are in the data arrays)
+        batch_dim=1,  # Lists
         VCC=VCC,
         data_subset=data_subset,
         image_subset=image_subset,

@@ -322,7 +322,7 @@ class SingleObservable:
             names_dim = 0
         elif len(self.data_names) > 1:
             names_dim = 1
-        num_dimensions = self.batch_dims + self.feature_dims + self.shots_per_batch + len_dim + names_dim + 1 # Shots dimension
+        num_dimensions = self.batch_dims + self.feature_dims + self.shots_per_batch + len_dim + names_dim # Shots dimension
         
         if len(np.shape(self.data)) != num_dimensions:
             raise ValueError(f"data must have {num_dimensions} dimensions based on provided batch_dims {self.batch_dims}, feature_dims {self.feature_dims}, shots_per_batch {self.shots_per_batch}, location {len_dim}, and data_names {names_dim}, but got {len(np.shape(self.data))} dimensions")
@@ -885,9 +885,19 @@ class DataPoint2:
                         loc = observable.location[-1]
                     if loc in observable.location:
                         idx = next(i for i, l in enumerate(observable.location) if l == loc)
-                        data = np.squeeze(observable.data[:,idx]).tolist()
-                        if isinstance(data, (int, float, np.integer, np.floating)):
-                            data = [data]
+                        # Handle both 1D (batch_dim=0) and 2D (batch_dim>0) data
+                        if observable.data.ndim == 1:
+                            # batch_dim=0: data is 1D array of values at different locations
+                            data = observable.data[idx]
+                            if isinstance(data, (int, float, np.integer, np.floating)):
+                                data = [data]
+                            else:
+                                data = [data]
+                        else:
+                            # batch_dim>0: data is 2D array (batch, locations)
+                            data = np.squeeze(observable.data[:,idx]).tolist()
+                            if isinstance(data, (int, float, np.integer, np.floating)):
+                                data = [data]
                         summary[key] = data
                         break
         summary["ID"] = self.ID

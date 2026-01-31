@@ -62,8 +62,8 @@ import shutil
 # ========================================
 # Configuration
 # ========================================
-# Number of batch dimensions (0 = no batching, single shot per file)
-batch_dim = 0
+# Number of batch dimensions (1 = lists)
+batch_dim = 1
 
 # Dictionary to hold loaded data from HDF5 file
 data_dict = {}
@@ -301,7 +301,19 @@ def main():
             os.makedirs(args.output_dir, exist_ok=True)
             # Save data point to HDF5
             D.saveHDF5(args.output_dir)
-            summary_table.append({**D.summary.summary})
+            
+            # Convert numpy types to Python native types for YAML compatibility
+            entry = {}
+            for key, value in D.summary.summary.items():
+                if isinstance(value, np.ndarray):
+                    entry[key] = value.tolist()
+                elif isinstance(value, (np.integer, np.floating)):
+                    entry[key] = value.item()
+                elif isinstance(value, list):
+                    entry[key] = [v.item() if isinstance(v, (np.integer, np.floating)) else v for v in value]
+                else:
+                    entry[key] = value
+            summary_table.append(entry)
 
     print(f"\nProcessing complete. Processed {len([f for f in files if f.endswith('.h5')])} files.")
     with open(os.path.join(args.output_dir, 'summary_table.yaml'), 'w') as f:
