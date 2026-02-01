@@ -163,25 +163,22 @@ class SingleObservable:
     This class handles data with flexible dimensionality:
     - Batch dimensions: For parameter sweeps or batch processing
     - Feature dimensions: 0 (scalar), 1 (waveform), 2 (image), etc.
-    - Shots per batch: Multiple shots within each batch
     - Location/name dimensions: Multiple locations or data fields
 
     The class validates data structure and handles unit conversion.
 
     Attributes
     ----------
-    batch_dims : int
-        Number of batch dimensions for parameter sweeps or batch processing.
-    feature_dims : int
+    batch_dims : list
+        List of batch dimension sizes. Last dimension is number of shots.
+    num_feature_dims : int
         Number of feature dimensions (0=scalar, 1=waveform, 2=image).
-    shots_per_batch : int
-        Number of shots per batch (0 if not using batch shots).
     location : ndarray
         Physical or logical location(s) in the beamline (1D array).
     data : ndarray
-        Observable data array with shape determined by dimensions.
-    data_names : ndarray
-        Names of the data fields (1D string array).
+        Observable data array with shape: concatenate(batch_dims, length_dim, feature_dims).
+    data_name : str
+        Name of the data field (single string).
     location_primary : bool
         If True, data is grouped by location; if False, by data type.
     attrs : dict
@@ -192,28 +189,50 @@ class SingleObservable:
         Physical units with automatic prefix handling.
     unit_multiplier : float
         Multiplier for unit prefix conversion.
+    num_length_dim : int
+        0 if single location, 1 if multiple locations (calculated property).
+    length_dim : tuple
+        Shape of location dimension (calculated property).
+    feature_dims : tuple
+        Shape of feature dimensions (calculated property).
 
     Methods
     -------
-    __init__(batch_dims, feature_dims, shots_per_batch, location, data, attrs, data_names, units, location_primary, control)
+    __init__(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_primary, control)
         Initialize a SingleObservable instance with data and metadata.
     data_dim_checker()
         Validates that data array dimensions match the specified structure.
     to_dict()
         Returns a dictionary representation of the observable (for control parameters).
     """
-    def __init__(self, batch_dims=0, feature_dims=0, shots_per_batch=0, location=None, data=None, attrs=None, data_names=None, units=None, location_primary=True,control=False):
+    def __init__(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_primary=True, control=False):
         """
         Initialize a SingleObservable instance.
         Args:
-            location: Location(s) associated with the output.
-            datum: Output value(s).
+            batch_dims (list): List of batch dimension sizes. Last is number of shots.
+            num_feature_dims (int): Number of feature dimensions.
+            location: Location(s) associated with the observable.
+            data: Observable data array.
             attrs (dict): Additional attributes.
-            datum_name (str): Name of the output datum.
-            datum_type (str): Type of datum ('scalar', 'image', 'distribution').
+            data_name (str): Name of the data field.
+            units: Physical units.
+            location_primary (bool): Group by location if True.
+            control (bool): True for control/input, False for measured/output.
         Raises:
             TypeError, ValueError: For invalid types or mismatched data.
         """
+        # Validate and convert batch_dims to list
+        if batch_dims is None:
+            batch_dims = []
+        elif isinstance(batch_dims, int):
+            raise TypeError("batch_dims must be a list, not an int. For previous batch_dims=0, use batch_dims=[]. For batch_dims=1, use batch_dims=[n_shots].")
+        elif not isinstance(batch_dims, (list, tuple)):
+            raise TypeError(f"batch_dims must be a list or tuple, got {type(batch_dims)}")
+        else:
+            batch_dims = list(batch_dims)
+            if not all(isinstance(d, (int, np.integer)) and d > 0 for d in batch_dims):
+                raise ValueError("All batch_dims values must be positive integers")
+        
         if location is not None and not (
             isinstance(location, (str, int, float, list, np.ndarray))
         ):
@@ -233,27 +252,22 @@ class SingleObservable:
         if not isinstance(location_primary, bool):
             raise ValueError("location_primary must be a boolean value")
         
-            
-            
+        # Validate control is a single bool
+        if not isinstance(control, bool):
+            raise TypeError(f"control must be a single boolean value, got {type(control)}")
         
-        # Validate data_names format
-        if data_names is not None and not (
-            isinstance(data_names, (str, list, np.ndarray))
-        ):
-            raise TypeError("data_names must be a string, list, or np.ndarray")
-        
-        if isinstance(data_names, str):
-            data_names = np.array([data_names])
-
-        if isinstance(data_names, np.ndarray):
-            if data_names.ndim != 1:
-                raise ValueError(f"data_names as ndarray must be 1-D, got {data_names.ndim}-D array")
-            if not all(isinstance(item, str) for item in data_names):
-                raise ValueError("data_names as ndarray must contain only string values")
-        elif isinstance(data_names, list):
-            if not all(isinstance(item, str) for item in data_names):
-                raise ValueError("data_names as list must contain only string values (no nested lists)")
-            data_names = np.array(data_names)
+        # Validate data_name format - must be a single string
+        if data_name is not None:
+            if isinstance(data_name, (list, np.ndarray)):
+                if len(data_name) == 0:
+                    raise ValueError("data_name cannot be an empty list")
+                elif len(data_name) == 1:
+                    # Coerce single-element list to string
+                    data_name = str(data_name[0])
+                else:
+                    raise ValueError(f"data_name must be a single string, got list of length {len(data_name)}")
+            elif not isinstance(data_name, str):
+                raise TypeError(f"data_name must be a string, got {type(data_name)}")
         
         # Validate and coerce data to np.array
         if data is not None:
@@ -262,70 +276,93 @@ class SingleObservable:
                     data = np.array(data)
                 except Exception as e:
                     raise TypeError(f"data must be convertible to np.ndarray, got type {type(data)}. Error: {e}")
+        
         # Check if data contains ParticleGroup objects
         if data is not None and data.size > 0:
             flat_data = data.flatten()
             has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
             
             if has_particlegroup:
-            # If any element is a ParticleGroup, all must be ParticleGroup
+                # If any element is a ParticleGroup, all must be ParticleGroup
                 if not all(isinstance(item, ParticleGroup) for item in flat_data):
-                    raise TypeError(f"If any element of data is a ParticleGroup, all elements must be ParticleGroup, got {[type(item) for item in flat_data]}")
+                    raise TypeError(f"If any element of data is a ParticleGroup, all elements must be ParticleGroup")
                 
-                # If all are ParticleGroup, set feature_dims to 0
-                feature_dims = 0
+                # If all are ParticleGroup, set num_feature_dims to 0
+                num_feature_dims = 0
 
         self.batch_dims = batch_dims
-        self.feature_dims = feature_dims
-        self.shots_per_batch = shots_per_batch
-
+        self.num_feature_dims = num_feature_dims
         self.location = location
-        self.data_names = data_names
+        self.data_name = data_name
         self.location_primary = location_primary
-
         self.data = data
         self.attrs = attrs if attrs is not None else {}
         self.control = control
 
-        
         if self.location_primary:
             if len(location) != 1:
                 raise ValueError(f"When location_primary is True, location must have exactly 1 element, got {len(location)}")
-        else:
-            if len(self.data_names) != 1:
-                raise ValueError(f"When location_primary is False, data_names must have exactly 1 element, got {len(self.data_names)}")
-
         
         prefix, valid_units = unit_checker(units)
-        # print(prefix, valid_units)
         self.unit_multiplier = prefix
-            
         self.units = units if valid_units == "Custom Unit" else valid_units
+        
         if self.data is not None:
             self.data_dim_checker()
 
+    @property
+    def num_length_dim(self):
+        """Number of location dimensions: 0 if single location, 1 if multiple."""
+        if self.location is None:
+            return 0
+        return 0 if len(self.location) == 1 else 1
+    
+    @property
+    def length_dim(self):
+        """Shape of location dimension."""
+        if self.num_length_dim == 0:
+            return ()
+        return (len(self.location),)
+    
+    @property
+    def feature_dims(self):
+        """Calculated feature dimensions from data shape."""
+        if self.data is None:
+            return tuple()
+        expected_prefix_dims = len(self.batch_dims) + self.num_length_dim
+        return self.data.shape[expected_prefix_dims:expected_prefix_dims + self.num_feature_dims]
+
     def data_dim_checker(self):
         """
-        Validates that data array dimensions match the specified batch, feature, and metadata dimensions.
-        
-        The expected total number of dimensions is calculated as:
-        batch_dims + feature_dims + shots_per_batch + location_dim + names_dim + 1 (shots dimension)
+        Validates that data array dimensions match: concatenate(batch_dims, length_dim, feature_dims).
         
         Raises:
             ValueError: If data dimensions don't match the expected structure.
         """
-        if len(self.location) == 1:
-            len_dim = 0
-        elif len(self.location) > 1:
-            len_dim = 1
-        if len(self.data_names) == 1:
-            names_dim = 0
-        elif len(self.data_names) > 1:
-            names_dim = 1
-        num_dimensions = self.batch_dims + self.feature_dims + self.shots_per_batch + len_dim + names_dim # Shots dimension
+        expected_shape = tuple(self.batch_dims) + self.length_dim + tuple([1] * self.num_feature_dims)
+        expected_ndim = len(self.batch_dims) + self.num_length_dim + self.num_feature_dims
         
-        if len(np.shape(self.data)) != num_dimensions:
-            raise ValueError(f"data must have {num_dimensions} dimensions based on provided batch_dims {self.batch_dims}, feature_dims {self.feature_dims}, shots_per_batch {self.shots_per_batch}, location {len_dim}, and data_names {names_dim}, but got {len(np.shape(self.data))} dimensions")
+        if len(self.data.shape) != expected_ndim:
+            raise ValueError(
+                f"data must have {expected_ndim} dimensions "
+                f"(batch_dims={len(self.batch_dims)}, length_dim={self.num_length_dim}, num_feature_dims={self.num_feature_dims}), "
+                f"but got {len(self.data.shape)} dimensions with shape {self.data.shape}"
+            )
+        
+        # Validate batch dimensions match
+        for i, expected_size in enumerate(self.batch_dims):
+            if self.data.shape[i] != expected_size:
+                raise ValueError(
+                    f"data batch dimension {i} should be {expected_size} but got {self.data.shape[i]}"
+                )
+        
+        # Validate location dimension matches
+        if self.num_length_dim == 1:
+            loc_dim_idx = len(self.batch_dims)
+            if self.data.shape[loc_dim_idx] != len(self.location):
+                raise ValueError(
+                    f"data location dimension should be {len(self.location)} but got {self.data.shape[loc_dim_idx]}"
+                )
             
     def to_dict(self):
         """
@@ -340,11 +377,10 @@ class SingleObservable:
             units_str = getattr(self.units, "unitSymbol", str(self.units))
         if self.control:
             return {
-                "name": self.data_names,
+                "name": self.data_name,
                 "value": self.data,
                 "location": self.location,
                 "units": units_str,
-                # "description": self.description
         }
         else:
             return {}
@@ -475,7 +511,7 @@ class Observables(list):
     -------
     __init__(observable_list)
         Initialize Observables instance from a list.
-    add_observable(batch_dims, feature_dims, shots_per_batch, location, data, attrs, data_names, units, location_primary, control)
+    add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_primary, control)
         Adds an observable to the list.
     observable_checker(allow_blank)
         Validates all observables in the list.
@@ -490,28 +526,29 @@ class Observables(list):
         observable_list = observable_list if observable_list is not None else []
 
         for observable in observable_list:
-
             self.add_observable(observable["location"], observable["datum"], observable["control"], observable["num_shots"], observable["units"], observable.get("attrs"), observable.get("datum_name", ""),observable.get("location_primary", True))
 
-    def add_observable(self, batch_dims=0, feature_dims=0, shots_per_batch=0, location=None, data=None, attrs=None, data_names=None, units=None, location_primary=True,control=False):
+    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_primary=True, control=False):
         """
-        Adds an output to the Outputs list.
+        Adds an observable to the Observables list.
         Args:
-            location: Location(s) associated with the output.
-            datum: Output value(s).
+            batch_dims (list): List of batch dimension sizes.
+            num_feature_dims (int): Number of feature dimensions.
+            location: Location(s) associated with the observable.
+            data: Observable data array.
             attrs (dict): Additional attributes.
-            datum_name (str): Name of the output datum.
-            datum_type (str): Type of datum ('scalar', 'image', 'distribution').
-
+            data_name (str): Name of the data field.
+            units: Physical units.
+            location_primary (bool): Group by location if True.
+            control (bool): True for control/input, False for measured/output.
         """
         output = SingleObservable(
             batch_dims=batch_dims,
-            feature_dims=feature_dims,
-            shots_per_batch=shots_per_batch,
+            num_feature_dims=num_feature_dims,
             location=location,
             data=data,
             attrs=attrs,
-            data_names=data_names,
+            data_name=data_name,
             units=units,
             location_primary=location_primary,
             control=control
@@ -521,7 +558,7 @@ class Observables(list):
 
     def observable_checker(self,allow_blank = False):
         """
-        Validates observables in the Outputs list.
+        Validates observables in the Observables list.
         Args:
             allow_blank (bool): If True, allows blank outputs.
         Raises:
@@ -725,15 +762,15 @@ class DataPoint2:
         # Sort observables by location and name for consistency
         sorted_obs = sorted(
             [obs for obs in self.observables],
-            key=lambda x: (str(x.location), str(x.data_names))
+            key=lambda x: (str(x.location), str(x.data_name))
         )
         
         for obs in sorted_obs:
             # Hash the location
             hasher.update(str(obs.location).encode('utf-8'))
             
-            # Hash the data_names
-            hasher.update(str(obs.data_names).encode('utf-8'))
+            # Hash the data_name
+            hasher.update(str(obs.data_name).encode('utf-8'))
             
             # Hash the actual data
             if obs.data is not None and obs.data.size > 0:
@@ -782,19 +819,23 @@ class DataPoint2:
         self.run_information.add_run_information(source, date, notes)
         return self
 
-    def add_observable(self, batch_dims=0, feature_dims=0, shots_per_batch=0, location=None, data=None, attrs=None, data_names=None, units=None, location_primary=True,control=False):
+    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_primary=True, control=False):
         """
-        Adds an output to the data point.
+        Adds an observable to the data point.
         Args:
-            location: Location(s) associated with the output.
-            datum: Output value(s).
+            batch_dims (list): List of batch dimension sizes.
+            num_feature_dims (int): Number of feature dimensions.
+            location: Location(s) associated with the observable.
+            data: Observable data array.
             attrs (dict): Additional attributes.
-            datum_name (str): Name of the output datum.
-            datum_type (str): Type of datum ('scalar', 'image', 'distribution').
+            data_name (str): Name of the data field.
+            units: Physical units.
+            location_primary (bool): Group by location if True.
+            control (bool): True for control/input, False for measured/output.
         Returns:
             self: The DataPoint2 instance.
         """
-        self.observables.add_observable(batch_dims, feature_dims, shots_per_batch, location, data, attrs, data_names, units, location_primary=location_primary, control=control)
+        self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_primary=location_primary, control=control)
         
         return self
 
@@ -944,7 +985,6 @@ class DataPoint2:
                         type_grouped_grp = observables_grp.create_group("Type_Grouped_Data")
                     else:
                         type_grouped_grp = observables_grp["Type_Grouped_Data"]
-                    assert len(observable.data_names) == 1, "observable.data_names must have length 1 when location_primary is False"
 
                     flat_data = observable.data.flatten()
                     has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
@@ -956,21 +996,22 @@ class DataPoint2:
                         # Write each ParticleGroup to its own HDF5 group
                         for idx in np.ndindex(data.shape):
                             pg = data[idx]
-                            path = observable.data_names[0] + '_' + str(j)
+                            path = observable.data_name + '_' + str(j)
                             pg_grp = type_grouped_grp.create_group(path)
                             data[idx] = path  # Replace ParticleGroup with path reference
                             pg.write(pg_grp)
                             j += 1
                         # Save path references as string dataset
-                        out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=data.astype('S'))
+                        out_grp = type_grouped_grp.create_dataset(observable.data_name, data=data.astype('S'))
                     else:
                         # Regular numeric data
-                        out_grp = type_grouped_grp.create_dataset(observable.data_names[0], data=np.array(observable.data))
+                        out_grp = type_grouped_grp.create_dataset(observable.data_name, data=np.array(observable.data))
 
-                    # Set dataset attributes (location, control, units)
+                    # Set dataset attributes (location, control, units, feature_dims)
                     location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
                     out_grp.attrs["location"] = location_value
                     out_grp.attrs["control"] = observable.control
+                    out_grp.attrs["num_feature_dims"] = observable.num_feature_dims
 
                     if isinstance(observable.units, str):
                         out_grp.attrs["units"] = observable.units
@@ -986,36 +1027,46 @@ class DataPoint2:
                     assert isinstance(observable.location, (list, np.ndarray)), "observable.location must be a list or np array when location_primary is True, got {}".format(type(observable.location))
                     assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True, got length {}".format(len(observable.location))
                     
-                    if str(observable.location[0]) not in observables_grp:
-                        out_grp = observables_grp.create_group(str(observable.location[0]))
+                    # Create group for this location
+                    location_str = str(observable.location[0])
+                    if location_str not in observables_grp:
+                        out_grp = observables_grp.create_group(location_str)
                     else:
-                        out_grp = observables_grp[str(observable.location[0])]
+                        out_grp = observables_grp[location_str]
 
                     flat_data = observable.data.flatten()
                     has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
                     
-                    for k, obs_name in enumerate(observable.data_names):
-                        if has_particlegroup:
-                            data = copy.deepcopy(observable.data)
-                            for idx in np.ndindex(data.shape):
-                                pg = data[idx]
-                                path = obs_name + '_' + str(j)
-                                pg_grp = out_grp.create_group(path)
-                                data[idx] = path
-                                pg.write(pg_grp)
-                                j += 1
-                            dataset = out_grp.create_dataset(obs_name, data=data.astype('S'))
-                        else:
-                            dataset = out_grp.create_dataset(obs_name, data=np.array(observable.data))
-                        dataset.attrs["location"] = str(observable.location[0])
-                        dataset.attrs["control"] = observable.control
-                        dataset.attrs["feature_dimensions"] = observable.feature_dims
-                        if isinstance(observable.units, str):
-                            dataset.attrs["units"] = observable.units
-                        else:
-                            dataset.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
-                        for k, v in observable.attrs.items():
-                            dataset.attrs[k] = v
+                    # Handle ParticleGroup data
+                    if has_particlegroup:
+                        data = copy.deepcopy(observable.data)
+                        for idx in np.ndindex(data.shape):
+                            pg = data[idx]
+                            path = observable.data_name + '_' + str(j)
+                            pg_grp = out_grp.create_group(path)
+                            data[idx] = path
+                            pg.write(pg_grp)
+                            j += 1
+                        dataset = out_grp.create_dataset(observable.data_name, data=data.astype('S'))
+                    else:
+                        dataset = out_grp.create_dataset(observable.data_name, data=np.array(observable.data))
+                    
+                    # Set dataset attributes
+                    dataset.attrs["location"] = location_str
+                    dataset.attrs["control"] = observable.control
+                    dataset.attrs["num_feature_dims"] = observable.num_feature_dims
+                    
+                    # Assert that location in metadata matches group name
+                    assert dataset.attrs["location"] == location_str, \
+                        f"Location mismatch: group name is '{location_str}' but metadata has '{dataset.attrs['location']}'"
+                    
+                    if isinstance(observable.units, str):
+                        dataset.attrs["units"] = observable.units
+                    else:
+                        dataset.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
+                    
+                    for k, v in observable.attrs.items():
+                        dataset.attrs[k] = v
 
             # Save simulation input file if this is a SimulatedDataPoint2
             if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
@@ -1025,7 +1076,11 @@ class DataPoint2:
             # Save metadata as root attributes
             # ==========================================
             f.attrs["ID"] = self.ID
-            f.attrs["batch_dimensions"] = self.observables[0].batch_dims if len(self.observables) > 0 else 0
+            # Store batch_dims as array if present
+            if len(self.observables) > 0 and self.observables[0].batch_dims:
+                f.attrs["batch_dims"] = np.array(self.observables[0].batch_dims)
+            else:
+                f.attrs["batch_dims"] = np.array([])
             f.attrs["run_information_source"] = self.run_information.source
             f.attrs["run_information_date"] = self.run_information.date
             f.attrs["run_information_notes"] = self.run_information.notes

@@ -318,7 +318,7 @@ def load_lattice_file_contents(lattice_dir):
                     continue
     return file_contents
 
-def add_datapoints(batch_dim, 
+def add_datapoints(batch_dims, 
                    I_list, 
                    data_dicts, 
                    run_info, 
@@ -341,7 +341,7 @@ def add_datapoints(batch_dim,
     - Run metadata and simulation information
     
     Args:
-        batch_dim (int): Number of batch dimensions (0 for no batching; the usual case for simulations).
+        batch_dims (list): List of batch dimension sizes. Empty list [] for no batching.
         I_list (list of impact.Impact): List of Impact simulation objects to process.
         data_dicts (list of dict): List of dictionaries containing input parameters that differ
                                     from template for each simulation.
@@ -361,8 +361,8 @@ def add_datapoints(batch_dim,
     D = SimulatedDataPoint2()
     num_pts = len(I_list)
     
-    # Add initial particles - create array or scalar depending on batch_dim
-    if batch_dim == 0:
+    # Add initial particles - create array or scalar depending on batch_dims
+    if len(batch_dims) == 0:
         # Single simulation: wrap ParticleGroup in 0-D object array
         initial_particles_data = np.empty((), dtype=object)
         initial_particles_data[()] = I_list[0].particles['initial_particles']
@@ -371,30 +371,30 @@ def add_datapoints(batch_dim,
         initial_particles_data = np.empty(num_pts, dtype=object)
         for i in range(len(I_list)):
             initial_particles_data[i] = I_list[i].particles['initial_particles']
-    D.add_observable(batch_dims=batch_dim, feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_names='VCC', units='m', location_primary=True,control=[True]*num_pts)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_name='VCC', units='m', location_primary=True, control=True)
     
     # Add particle data at intermediate screen/observer locations
     # These are the particle distributions captured at various points along the beamline
     for key, value in I_list[0].output['particles'].items():
         if key != 'final_particles' and key != 'initial_particles':
-            if batch_dim == 0:
+            if len(batch_dims) == 0:
                 particle_data = np.empty((), dtype=object)
                 particle_data[()] = I_list[0].output['particles'][key]
             else:
                 particle_data = np.empty(num_pts, dtype=object)
                 for i in range(len(I_list)):
                     particle_data[i] = I_list[i].output['particles'][key]
-            D.add_observable(batch_dims=batch_dim, feature_dims=0, location=key, data=particle_data, attrs={}, data_names=key, units='m', location_primary=True,control=[False]*num_pts)
+            D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=key, data=particle_data, attrs={}, data_name=key, units='m', location_primary=True, control=False)
     
     # Add final particle distribution at end of beamline
-    if batch_dim == 0:
+    if len(batch_dims) == 0:
         final_particles_data = np.empty((), dtype=object)
         final_particles_data[()] = I_list[0].particles['final_particles']
     else:
         final_particles_data = np.empty(num_pts, dtype=object)
         for i in range(len(I_list)):
             final_particles_data[i] = I_list[i].particles['final_particles']
-    D.add_observable(batch_dims=batch_dim, feature_dims=0, location='final_particles', data=final_particles_data, attrs={}, data_names='final_particles', units='m', location_primary=False,control=[False]*num_pts)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location='final_particles', data=final_particles_data, attrs={}, data_name='final_particles', units='m', location_primary=False, control=False)
     
     # Add lattice configuration files (rfdata files, YAML templates, etc.)
     D.add_lattice(lattice_location='included', lattice_files=rfdata_contents)
@@ -416,7 +416,7 @@ def add_datapoints(batch_dim,
     first_locations = None
     for key, value in I_list[0].output['stats'].items():
         if key != 'mean_z':
-            if batch_dim == 0:
+            if len(batch_dims) == 0:
                 # Single simulation: 1D array of values at different z-locations
                 stat_data = np.array(I_list[0].output['stats'][key])
             else:
@@ -433,14 +433,14 @@ def add_datapoints(batch_dim,
                             f"Location data mismatch at point {i}: expected {first_locations}, got {I_list[i].output['stats']['mean_z'].tolist()}"
             
             # For single simulation, get locations from the first (and only) simulation
-            if batch_dim == 0 and first_locations is None:
+            if len(batch_dims) == 0 and first_locations is None:
                 first_locations = I_list[0].output['stats']['mean_z'].tolist()
 
             # Add observable with appropriate units
             if key in output_unit_list:
-                D.add_observable(batch_dims=batch_dim, feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_names=key, units=output_unit_list[key], location_primary=False,control=[False]*len(first_locations))
+                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_primary=False, control=False)
             else:
-                D.add_observable(batch_dims=batch_dim, feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_names=key, units="unitless", location_primary=False,control=[False]*len(first_locations))
+                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units="unitless", location_primary=False, control=False)
     
     # Verify consistency across all simulations in the batch
     # Assert all data_dicts have the same keys (all simulations should vary the same parameters)
@@ -478,12 +478,12 @@ def add_datapoints(batch_dim,
         # Get the data array for this parameter (one value per simulation)
         scalar_data = master_dict[col]
         
-        # For single simulation (batch_dim=0), extract scalar value
-        if batch_dim == 0:
+        # For single simulation (len(batch_dims)==0), extract scalar value
+        if len(batch_dims) == 0:
             scalar_data = scalar_data[0]
         
         # Add as observable with control=True to indicate it's an input parameter
-        D.add_observable(batch_dims=batch_dim, feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, attrs={'Description': scalar_inputs[col]['description']}, data_names=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True,control=[True]*num_pts)
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, attrs={'Description': scalar_inputs[col]['description']}, data_name=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True, control=True)
     
     # Save the complete data point to HDF5 file
     os.makedirs(output_dir, exist_ok=True)
@@ -585,7 +585,7 @@ def main():
 
         # Create standardized data point and save to HDF5
         D, summary_table = add_datapoints(
-            batch_dim=0,  # No batching (single simulation per file) 
+            batch_dims=[],  # No batching (single simulation per file) 
             I_list=[I], 
             data_dicts=[data_dict], 
             run_info=run_info, 

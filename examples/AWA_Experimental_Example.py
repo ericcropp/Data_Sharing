@@ -62,8 +62,8 @@ import shutil
 # ========================================
 # Configuration
 # ========================================
-# Number of batch dimensions (2 = list of lists)
-batch_dim = 2
+# Batch dimensions - using 2 files means batch_dims=[2]
+batch_dims = None  # Will be set based on number of files loaded
 
 # Dictionary to hold loaded data from HDF5 file
 data_dict = {}
@@ -251,6 +251,26 @@ def main():
     # Convert lists to arrays once per key
     for key in combined_data.keys():
         combined_data[key] = np.array(combined_data[key])
+    
+    # Determine batch_dims from the data shape
+    # AWA data has shape (num_files, num_shots_per_file, ...)
+    # For scalars, this will be (num_files, num_shots_per_file)
+    sample_key = list(combined_data.keys())[0]
+    sample_shape = combined_data[sample_key].shape
+    
+    # For scalars: shape is (n_files, n_shots, ...)
+    # For images: shape is (n_files, n_shots, height, width)
+    # For waveforms: shape is (n_files, n_shots, n_points)
+    # batch_dims should capture the (n_files, n_shots) dimensions
+    
+    # Determine batch_dims from first scalar (non-image, non-waveform) data
+    for key in combined_data.keys():
+        if key != 'images' and 'wf' not in key and 'ICT:x' not in key:
+            # This is scalar data - shape should be (n_files, n_shots)
+            batch_dims = list(combined_data[key].shape)
+            break
+    
+    print(f"Using batch_dims={batch_dims} for data shape {sample_shape}")
             
     # Create new data point object
     D = DataPoint2()
@@ -262,11 +282,11 @@ def main():
             # Scalar measurements (0D) - single values per shot
             # Examples: RF phases, power levels, charge readings
             D.add_observable(
-                batch_dims=batch_dim, 
-                feature_dims=0,  # Scalar (0D)
+                batch_dims=batch_dims, 
+                num_feature_dims=0,  # Scalar (0D)
                 location=[strip_last_colon(key)], 
                 data=combined_data[key], 
-                data_names=key, 
+                data_name=key, 
                 units=units[key],
                 location_primary=True,
                 control=control_keys[key]
@@ -275,11 +295,11 @@ def main():
             # 2D images from screen cameras
             # Includes pixel calibration in attributes
             D.add_observable(
-                batch_dims=batch_dim, 
-                feature_dims=2,  # 2D image
+                batch_dims=batch_dims, 
+                num_feature_dims=2,  # 2D image
                 location=[screen_location], 
                 data=combined_data[key], 
-                data_names=key, 
+                data_name=key, 
                 units=units[key],
                 location_primary=True,
                 control=control_keys[key],
@@ -289,11 +309,11 @@ def main():
             # 1D waveforms from diagnostics
             # Examples: ICT traces, time-resolved current measurements
             D.add_observable(
-                batch_dims=batch_dim, 
-                feature_dims=1,  # 1D waveform
+                batch_dims=batch_dims, 
+                num_feature_dims=1,  # 1D waveform
                 location=[strip_last_colon(key)], 
                 data=combined_data[key], 
-                data_names=key, 
+                data_name=key, 
                 units=units[key],
                 location_primary=True,
                 control=control_keys[key]

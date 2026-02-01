@@ -298,7 +298,7 @@ summary_table = []
 # Data processing function
 # ========================================
 
-def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar_output_cols, metadata,
+def add_datapoints(batch_dims, VCC, data_subset, image_subset, input_cols, scalar_output_cols, metadata,
                    output_dir, lattice_location=lattice_location, loc_dict=loc_dict,
                    summary_table=summary_table):
     """
@@ -313,10 +313,10 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
     - Run metadata
     
     Args:
-        batch_dim (int): Number of batch dimensions (0 for no batching).
-        VCC (np.ndarray): VCC camera image(s) with shape (n_shots, height, width).
+        batch_dims (list): List of batch dimension sizes. Empty list [] for no batching.
+        VCC (np.ndarray): VCC camera image(s) with shape (n_shots, height, width) or (height, width).
         data_subset (pd.DataFrame): DataFrame containing scalar measurements for the shot(s).
-        image_subset (np.ndarray): Profile screen image(s) with shape (n_shots, height, width).
+        image_subset (np.ndarray): Profile screen image(s) with shape (n_shots, height, width) or (height, width).
         input_cols (dict): Dictionary mapping input PV names to their units.
         scalar_output_cols (dict): Dictionary mapping output PV names to their units.
         metadata (dict): Run metadata containing 'source', 'date', and 'notes'.
@@ -332,23 +332,23 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
     """
     # Create new data point object
     D = DataPoint2()
-    D.add_observable(batch_dims=batch_dim, feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'pixel_calibration':data_subset['CAMR:LT10:900:RESOLUTION'].values.tolist()}, data_names='VCC_Image', units='um',location_primary=True,control=True)
-    D.add_observable(batch_dims=batch_dim, feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'pixel_calibration':data_subset['PROF:IN10:571:RESOLUTION'].values.tolist()}, data_names='Screen_Image', units='um',location_primary=True,control=False)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'pixel_calibration':data_subset['CAMR:LT10:900:RESOLUTION'].values.tolist()}, data_name='VCC_Image', units='um', location_primary=True, control=True)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'pixel_calibration':data_subset['PROF:IN10:571:RESOLUTION'].values.tolist()}, data_name='Screen_Image', units='um', location_primary=True, control=False)
     # Populate scalar inputs for this shot
     for col in input_cols.keys():
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)
-        # For single shots (batch_dim=0), extract scalar value; for batches, keep as array
-        if batch_dim == 0:
+        # For single shots (len(batch_dims)==0), extract scalar value; for batches, keep as array
+        if len(batch_dims) == 0:
             col_data = col_data[0]
         
-        D.add_observable(batch_dims=batch_dim, feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=input_cols[col], data_names=':'.join(col.split(':')[3:]),location_primary=True,control=True)
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=input_cols[col], data_name=':'.join(col.split(':')[3:]), location_primary=True, control=True)
     for col in scalar_output_cols.keys():
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)
-        # For single shots (batch_dim=0), extract scalar value; for batches, keep as array
-        if batch_dim == 0:
+        # For single shots (len(batch_dims)==0), extract scalar value; for batches, keep as array
+        if len(batch_dims) == 0:
             col_data = col_data[0]
         
-        D.add_observable(batch_dims=batch_dim, feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=scalar_output_cols[col], data_names=':'.join(col.split(':')[3:]),location_primary=True,control=False)
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=scalar_output_cols[col], data_name=':'.join(col.split(':')[3:]), location_primary=True, control=False)
 
     # Add lattice information and device location mapping
     D.add_lattice(lattice_location=lattice_location, PV_table=loc_dict)
@@ -440,7 +440,7 @@ def main():
         
         # Process and save this shot
         D, summary_table = add_datapoints(
-            batch_dim=0,  # No batching (single shot per file)
+            batch_dims=[],  # No batching (single shot per file)
             VCC=VCC,
             data_subset=data_subset,
             image_subset=image_subset,
@@ -462,7 +462,7 @@ def main():
     image_subset = all_images[5:10, :, :]  # Shape: (5, height, width)
     
     D, summary_table = add_datapoints(
-        batch_dim=1,  # Lists
+        batch_dims=[5],  # Batch of 5 shots
         VCC=VCC,
         data_subset=data_subset,
         image_subset=image_subset,
