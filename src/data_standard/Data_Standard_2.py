@@ -923,11 +923,11 @@ class DataPoint2:
             <location_name>/ (group, if location_primary=True)
                 <data_name> (dataset): Observable data
                     Attributes: location, control, units, custom attrs
-                <data_name>_<idx> (group): ParticleGroup data (if applicable)
+                <data_name>_<i>_<j>_... (group): ParticleGroup data matching batch_dims indices
             Type_Grouped_Data/ (group, if location_primary=False)
                 <data_name> (dataset): Observable data array
                     Attributes: location (array), control, units, custom attrs
-                <data_name>_<idx> (group): ParticleGroup data (if applicable)
+                <data_name>_<i>_<j>_... (group): ParticleGroup data matching batch_dims indices
         
         Root Attributes:
         ----------------
@@ -976,7 +976,6 @@ class DataPoint2:
             # Save observables
             # ==========================================
             observables_grp = f.create_group("observables")
-            j = 0
             for i, observable in enumerate(self.observables):
 
                 if observable.location_primary == False:
@@ -991,18 +990,21 @@ class DataPoint2:
                     
                     # Handle ParticleGroup objects specially
                     if has_particlegroup:
-                        # Deep copy to avoid modifying original data
-                        data = copy.deepcopy(observable.data)
-                        # Write each ParticleGroup to its own HDF5 group
-                        for idx in np.ndindex(data.shape):
-                            pg = data[idx]
-                            path = observable.data_name + '_' + str(j)
+                        # Write each ParticleGroup to its own HDF5 group with index-based naming
+                        for idx in np.ndindex(observable.data.shape):
+                            pg = observable.data[idx]
+                            # Create path using indices: name_i_j_k for batch_dims
+                            # For 0-D arrays (batch_dims=()), idx is (), so use '0' as the index
+                            if len(idx) == 0:
+                                idx_str = '0'
+                            else:
+                                idx_str = '_'.join(map(str, idx))
+                            path = observable.data_name + '_' + idx_str
                             pg_grp = type_grouped_grp.create_group(path)
-                            data[idx] = path  # Replace ParticleGroup with path reference
                             pg.write(pg_grp)
-                            j += 1
-                        # Save path references as string dataset
-                        out_grp = type_grouped_grp.create_dataset(observable.data_name, data=data.astype('S'))
+                        # Note: No dataset needed - ParticleGroups are directly accessible by index
+                        # Skip attribute setting for ParticleGroups as they don't have a dataset
+                        continue
                     else:
                         # Regular numeric data
                         out_grp = type_grouped_grp.create_dataset(observable.data_name, data=np.array(observable.data))
@@ -1039,15 +1041,21 @@ class DataPoint2:
                     
                     # Handle ParticleGroup data
                     if has_particlegroup:
-                        data = copy.deepcopy(observable.data)
-                        for idx in np.ndindex(data.shape):
-                            pg = data[idx]
-                            path = observable.data_name + '_' + str(j)
+                        # Write each ParticleGroup to its own HDF5 group with index-based naming
+                        for idx in np.ndindex(observable.data.shape):
+                            pg = observable.data[idx]
+                            # Create path using indices: name_i_j_k for batch_dims
+                            # For 0-D arrays (batch_dims=()), idx is (), so use '0' as the index
+                            if len(idx) == 0:
+                                idx_str = '0'
+                            else:
+                                idx_str = '_'.join(map(str, idx))
+                            path = observable.data_name + '_' + idx_str
                             pg_grp = out_grp.create_group(path)
-                            data[idx] = path
                             pg.write(pg_grp)
-                            j += 1
-                        dataset = out_grp.create_dataset(observable.data_name, data=data.astype('S'))
+                        # Note: No dataset needed - ParticleGroups are directly accessible by index
+                        # Skip attribute setting for ParticleGroups as they don't have a dataset
+                        continue
                     else:
                         dataset = out_grp.create_dataset(observable.data_name, data=np.array(observable.data))
                     
