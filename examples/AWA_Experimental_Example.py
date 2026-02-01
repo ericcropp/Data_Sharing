@@ -293,7 +293,7 @@ def main():
             )
         elif key == 'images':
             # 2D images from screen cameras
-            # Includes pixel calibration in attributes
+            # Includes bin size and offset in attributes
             D.add_observable(
                 batch_dims=batch_dims, 
                 num_feature_dims=2,  # 2D image
@@ -303,7 +303,7 @@ def main():
                 units=units[key],
                 location_primary=True,
                 control=control_keys[key],
-                attrs={'pxcal': pxcal}
+                attrs={'bin_size': pxcal, 'offset': 0}
             )
         elif 'wf' in key or 'ICT:x' in key:
             # 1D waveforms from diagnostics
@@ -316,7 +316,8 @@ def main():
                 data_name=key, 
                 units=units[key],
                 location_primary=True,
-                control=control_keys[key]
+                control=control_keys[key],
+                attrs={'bin_size': 1, 'offset': 0}
             )
     D.add_lattice(lattice_location=lattice_location)    
 

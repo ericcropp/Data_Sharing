@@ -332,8 +332,8 @@ def add_datapoints(batch_dims, VCC, data_subset, image_subset, input_cols, scala
     """
     # Create new data point object
     D = DataPoint2()
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'pixel_calibration':data_subset['CAMR:LT10:900:RESOLUTION'].values.tolist()}, data_name='VCC_Image', units='um', location_primary=True, control=True)
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'pixel_calibration':data_subset['PROF:IN10:571:RESOLUTION'].values.tolist()}, data_name='Screen_Image', units='um', location_primary=True, control=False)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'bin_size':data_subset['CAMR:LT10:900:RESOLUTION'].values.tolist(), 'offset': 0}, data_name='VCC_Image', units='um', location_primary=True, control=True)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'bin_size':data_subset['PROF:IN10:571:RESOLUTION'].values.tolist(), 'offset': 0}, data_name='Screen_Image', units='um', location_primary=True, control=False)
     # Populate scalar inputs for this shot
     for col in input_cols.keys():
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)

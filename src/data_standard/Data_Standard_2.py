@@ -182,7 +182,7 @@ class SingleObservable:
     location_primary : bool
         If True, data is grouped by location; if False, by data type.
     attrs : dict
-        Additional attributes (e.g., pixel calibration for images).
+        Additional attributes. For non-scalar data (num_feature_dims>0), must include 'bin_size' and 'offset'.
     control : bool
         Flag indicating control/input parameter (True) vs measured/output (False).
     units : str or unit object
@@ -298,6 +298,13 @@ class SingleObservable:
         self.data = data
         self.attrs = attrs if attrs is not None else {}
         self.control = control
+        
+        # Validate bin_size and offset for non-scalar data
+        if self.num_feature_dims > 0:
+            if 'bin_size' not in self.attrs:
+                raise ValueError(f"For non-scalar data (num_feature_dims={self.num_feature_dims}), 'bin_size' must be specified in attrs")
+            if 'offset' not in self.attrs:
+                raise ValueError(f"For non-scalar data (num_feature_dims={self.num_feature_dims}), 'offset' must be specified in attrs")
 
         if self.location_primary:
             if len(location) != 1:
