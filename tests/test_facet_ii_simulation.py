@@ -22,7 +22,8 @@ from pathlib import Path
 # Get the root directory of the project
 PROJECT_ROOT = Path(__file__).parent.parent
 EXAMPLES_DIR = PROJECT_ROOT / "examples"
-DATA_INPUT_DIR = EXAMPLES_DIR / "data" / "input" / "FACET-II_Simulation_Data"
+# Use small test data subset instead of full LFS data
+DATA_INPUT_DIR = PROJECT_ROOT / "tests" / "test_data" / "FACET-II_Simulation_Data"
 LATTICE_FILES_DIR = DATA_INPUT_DIR / "Lattice_Files"
 
 

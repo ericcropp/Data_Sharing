@@ -19,13 +19,6 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
-      with:
-        lfs: false
-    
-    - name: Checkout only FACET-II Simulation LFS files
-      run: |
-        git lfs install
-        git lfs pull --include="examples/data/input/FACET-II_Simulation_Data/*.h5"
     
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
@@ -57,13 +50,6 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
-      with:
-        lfs: false
-    
-    - name: Checkout only FACET-II Simulation LFS files
-      run: |
-        git lfs install
-        git lfs pull --include="examples/data/input/FACET-II_Simulation_Data/*.h5"
     
     - name: Setup Miniforge
       uses: conda-incubator/setup-miniconda@v3
