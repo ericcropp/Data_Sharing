@@ -62,8 +62,8 @@ import shutil
 # ========================================
 # Configuration
 # ========================================
-# Number of batch dimensions (1 = lists)
-batch_dim = 1
+# Number of batch dimensions (2 = list of lists)
+batch_dim = 2
 
 # Dictionary to hold loaded data from HDF5 file
 data_dict = {}
@@ -232,86 +232,95 @@ def main():
     files = os.listdir(args.input_dir)
     print(f"Processing AWA data files from {args.input_dir}...")
     
-    # Process each HDF5 file
+    # Process each HDF5 file - collect all data first
     summary_table = []
-    for file in files:
-        if file.endswith('.h5'):
-            print(f"\n  Processing file: {file}")
+    h5_files = [f for f in files if f.endswith('.h5')]
+    print(f"Found {len(h5_files)} HDF5 files to process")
+    
+    # Load all data at once - more efficient than per-key loops
+    combined_data = {}
+    for file in h5_files:
+        print(f"\n  Loading file: {file}")
+        with h5py.File(os.path.join(args.input_dir, file), 'r') as f:
+            for key in f.keys():
+                if key not in combined_data:
+                    combined_data[key] = []
+                combined_data[key].append(np.array(f[key]))
+    
+    print(f"\nConverting to arrays and creating DataPoint2...")
+    # Convert lists to arrays once per key
+    for key in combined_data.keys():
+        combined_data[key] = np.array(combined_data[key])
             
-            # Load all datasets from the HDF5 file
-            with h5py.File(os.path.join(args.input_dir, file), 'r') as f:
-                for key in f.keys():
-                    data_dict[key] = np.array(f[key])
-            
-            # Create new data point object for this file
-            D = DataPoint2()
-            
-            # Add observables based on data type
-            # Classify each dataset and add with appropriate dimensions
-            for key in data_dict.keys():
-                if key != 'images' and 'wf' not in key and 'ICT:x' not in key:
-                    # Scalar measurements (0D) - single values per shot
-                    # Examples: RF phases, power levels, charge readings
-                    D.add_observable(
-                        batch_dims=batch_dim, 
-                        feature_dims=0,  # Scalar (0D)
-                        location=[strip_last_colon(key)], 
-                        data=data_dict[key], 
-                        data_names=key, 
-                        units=units[key],
-                        location_primary=True,
-                        control=control_keys[key]
-                    )
-                elif key == 'images':
-                    # 2D images from screen cameras
-                    # Includes pixel calibration in attributes
-                    D.add_observable(
-                        batch_dims=batch_dim, 
-                        feature_dims=2,  # 2D image
-                        location=[screen_location], 
-                        data=data_dict[key], 
-                        data_names=key, 
-                        units=units[key],
-                        location_primary=True,
-                        control=control_keys[key],
-                        attrs={'pxcal': pxcal}
-                    )
-                elif 'wf' in key or 'ICT:x' in key:
-                    # 1D waveforms from diagnostics
-                    # Examples: ICT traces, time-resolved current measurements
-                    D.add_observable(
-                        batch_dims=batch_dim, 
-                        feature_dims=1,  # 1D waveform
-                        location=[strip_last_colon(key)], 
-                        data=data_dict[key], 
-                        data_names=key, 
-                        units=units[key],
-                        location_primary=True,
-                        control=control_keys[key]
-                    )
-            D.add_lattice(lattice_location=lattice_location)    
+    # Create new data point object
+    D = DataPoint2()
+    
+    # Add observables based on data type
+    # Classify each dataset and add with appropriate dimensions
+    for key in combined_data.keys():
+        if key != 'images' and 'wf' not in key and 'ICT:x' not in key:
+            # Scalar measurements (0D) - single values per shot
+            # Examples: RF phases, power levels, charge readings
+            D.add_observable(
+                batch_dims=batch_dim, 
+                feature_dims=0,  # Scalar (0D)
+                location=[strip_last_colon(key)], 
+                data=combined_data[key], 
+                data_names=key, 
+                units=units[key],
+                location_primary=True,
+                control=control_keys[key]
+            )
+        elif key == 'images':
+            # 2D images from screen cameras
+            # Includes pixel calibration in attributes
+            D.add_observable(
+                batch_dims=batch_dim, 
+                feature_dims=2,  # 2D image
+                location=[screen_location], 
+                data=combined_data[key], 
+                data_names=key, 
+                units=units[key],
+                location_primary=True,
+                control=control_keys[key],
+                attrs={'pxcal': pxcal}
+            )
+        elif 'wf' in key or 'ICT:x' in key:
+            # 1D waveforms from diagnostics
+            # Examples: ICT traces, time-resolved current measurements
+            D.add_observable(
+                batch_dims=batch_dim, 
+                feature_dims=1,  # 1D waveform
+                location=[strip_last_colon(key)], 
+                data=combined_data[key], 
+                data_names=key, 
+                units=units[key],
+                location_primary=True,
+                control=control_keys[key]
+            )
+    D.add_lattice(lattice_location=lattice_location)    
 
-            D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
-            D.finalize()
+    D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
+    D.finalize()
 
-            os.makedirs(args.output_dir, exist_ok=True)
-            # Save data point to HDF5
-            D.saveHDF5(args.output_dir)
-            
-            # Convert numpy types to Python native types for YAML compatibility
-            entry = {}
-            for key, value in D.summary.summary.items():
-                if isinstance(value, np.ndarray):
-                    entry[key] = value.tolist()
-                elif isinstance(value, (np.integer, np.floating)):
-                    entry[key] = value.item()
-                elif isinstance(value, list):
-                    entry[key] = [v.item() if isinstance(v, (np.integer, np.floating)) else v for v in value]
-                else:
-                    entry[key] = value
-            summary_table.append(entry)
+    os.makedirs(args.output_dir, exist_ok=True)
+    # Save data point to HDF5
+    D.saveHDF5(args.output_dir)
+    
+    # Convert numpy types to Python native types for YAML compatibility
+    entry = {}
+    for key, value in D.summary.summary.items():
+        if isinstance(value, np.ndarray):
+            entry[key] = value.tolist()
+        elif isinstance(value, (np.integer, np.floating)):
+            entry[key] = value.item()
+        elif isinstance(value, list):
+            entry[key] = [v.item() if isinstance(v, (np.integer, np.floating)) else v for v in value]
+        else:
+            entry[key] = value
+    summary_table.append(entry)
 
-    print(f"\nProcessing complete. Processed {len([f for f in files if f.endswith('.h5')])} files.")
+    print(f"\nProcessing complete. Processed {len(h5_files)} files.")
     with open(os.path.join(args.output_dir, 'summary_table.yaml'), 'w') as f:
         yaml.dump(summary_table, f)
 

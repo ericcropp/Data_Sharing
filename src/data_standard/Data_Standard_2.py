@@ -529,6 +529,18 @@ class Observables(list):
         """
         if allow_blank and len(self) == 0:
             return
+        
+        # Check that all observables have the same batch_dims
+        if len(self) > 0:
+            first_batch_dims = self[0].batch_dims
+            for i, observable in enumerate(self):
+                if observable.batch_dims != first_batch_dims:
+                    raise ValueError(
+                        f"All observables must have the same batch_dims. "
+                        f"Observable at index 0 has batch_dims={first_batch_dims}, "
+                        f"but observable at index {i} has batch_dims={observable.batch_dims}"
+                    )
+        
         for observable in self:
             observable.data_dim_checker()
 
@@ -1012,6 +1024,7 @@ class DataPoint2:
             # Save metadata as root attributes
             # ==========================================
             f.attrs["ID"] = self.ID
+            f.attrs["batch_dims"] = self.observables[0].batch_dims if len(self.observables) > 0 else 0
             f.attrs["run_information_source"] = self.run_information.source
             f.attrs["run_information_date"] = self.run_information.date
             f.attrs["run_information_notes"] = self.run_information.notes
