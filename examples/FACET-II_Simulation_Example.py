@@ -585,7 +585,7 @@ def main():
 
         # Create standardized data point and save to HDF5
         D, summary_table = add_datapoints(
-            batch_dims=[],  # No batching (single simulation per file) 
+            batch_dims=(),  # No batching (single simulation per file) 
             I_list=[I], 
             data_dicts=[data_dict], 
             run_info=run_info, 

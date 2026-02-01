@@ -169,8 +169,8 @@ class SingleObservable:
 
     Attributes
     ----------
-    batch_dims : list
-        List of batch dimension sizes. Last dimension is number of shots.
+    batch_dims : tuple
+        Tuple of batch dimension sizes. Last dimension is number of shots.
     num_feature_dims : int
         Number of feature dimensions (0=scalar, 1=waveform, 2=image).
     location : ndarray
@@ -209,7 +209,7 @@ class SingleObservable:
         """
         Initialize a SingleObservable instance.
         Args:
-            batch_dims (list): List of batch dimension sizes. Last is number of shots.
+            batch_dims (tuple): Tuple of batch dimension sizes. Last is number of shots.
             num_feature_dims (int): Number of feature dimensions.
             location: Location(s) associated with the observable.
             data: Observable data array.
@@ -221,15 +221,15 @@ class SingleObservable:
         Raises:
             TypeError, ValueError: For invalid types or mismatched data.
         """
-        # Validate and convert batch_dims to list
+        # Validate and convert batch_dims to tuple
         if batch_dims is None:
-            batch_dims = []
+            batch_dims = ()
         elif isinstance(batch_dims, int):
-            raise TypeError("batch_dims must be a list, not an int. For previous batch_dims=0, use batch_dims=[]. For batch_dims=1, use batch_dims=[n_shots].")
+            raise TypeError("batch_dims must be a tuple, not an int. For previous batch_dims=0, use batch_dims=(). For batch_dims=1, use batch_dims=(n_shots,).")
         elif not isinstance(batch_dims, (list, tuple)):
             raise TypeError(f"batch_dims must be a list or tuple, got {type(batch_dims)}")
         else:
-            batch_dims = list(batch_dims)
+            batch_dims = tuple(batch_dims)
             if not all(isinstance(d, (int, np.integer)) and d > 0 for d in batch_dims):
                 raise ValueError("All batch_dims values must be positive integers")
         
@@ -339,7 +339,7 @@ class SingleObservable:
         Raises:
             ValueError: If data dimensions don't match the expected structure.
         """
-        expected_shape = tuple(self.batch_dims) + self.length_dim + tuple([1] * self.num_feature_dims)
+        expected_shape = self.batch_dims + self.length_dim + tuple([1] * self.num_feature_dims)
         expected_ndim = len(self.batch_dims) + self.num_length_dim + self.num_feature_dims
         
         if len(self.data.shape) != expected_ndim:

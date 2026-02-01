@@ -62,7 +62,7 @@ import shutil
 # ========================================
 # Configuration
 # ========================================
-# Batch dimensions - using 2 files means batch_dims=[2]
+# Batch dimensions - using 2 files means batch_dims=(2,)
 batch_dims = None  # Will be set based on number of files loaded
 
 # Dictionary to hold loaded data from HDF5 file
@@ -267,7 +267,7 @@ def main():
     for key in combined_data.keys():
         if key != 'images' and 'wf' not in key and 'ICT:x' not in key:
             # This is scalar data - shape should be (n_files, n_shots)
-            batch_dims = list(combined_data[key].shape)
+            batch_dims = tuple(combined_data[key].shape)
             break
     
     print(f"Using batch_dims={batch_dims} for data shape {sample_shape}")

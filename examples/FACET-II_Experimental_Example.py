@@ -440,7 +440,7 @@ def main():
         
         # Process and save this shot
         D, summary_table = add_datapoints(
-            batch_dims=[],  # No batching (single shot per file)
+            batch_dims=(),  # No batching (single shot per file)
             VCC=VCC,
             data_subset=data_subset,
             image_subset=image_subset,
@@ -462,7 +462,7 @@ def main():
     image_subset = all_images[5:10, :, :]  # Shape: (5, height, width)
     
     D, summary_table = add_datapoints(
-        batch_dims=[5],  # Batch of 5 shots
+        batch_dims=(5,),  # Batch of 5 shots
         VCC=VCC,
         data_subset=data_subset,
         image_subset=image_subset,
