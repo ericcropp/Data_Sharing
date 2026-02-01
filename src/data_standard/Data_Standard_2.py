@@ -1009,6 +1009,7 @@ class DataPoint2:
                             dataset = out_grp.create_dataset(obs_name, data=np.array(observable.data))
                         dataset.attrs["location"] = str(observable.location[0])
                         dataset.attrs["control"] = observable.control
+                        dataset.attrs["feature_dimensions"] = observable.feature_dims
                         if isinstance(observable.units, str):
                             dataset.attrs["units"] = observable.units
                         else:
@@ -1024,7 +1025,7 @@ class DataPoint2:
             # Save metadata as root attributes
             # ==========================================
             f.attrs["ID"] = self.ID
-            f.attrs["batch_dims"] = self.observables[0].batch_dims if len(self.observables) > 0 else 0
+            f.attrs["batch_dimensions"] = self.observables[0].batch_dims if len(self.observables) > 0 else 0
             f.attrs["run_information_source"] = self.run_information.source
             f.attrs["run_information_date"] = self.run_information.date
             f.attrs["run_information_notes"] = self.run_information.notes
