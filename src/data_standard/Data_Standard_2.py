@@ -541,59 +541,19 @@ class Summary:
 
     Attributes
     ----------
-    summary_keys : list of str
-        Keys (observable names) to include in the summary for fast querying.
-    summary_location : str, float, or int
-        Location at which to extract summary data ('final' or specific location).
     summary : dict
-        Dictionary containing extracted summary values (populated by get_summary()).
+        Dictionary containing ID and run information (populated by get_summary()).
 
     Methods
     -------
-    __init__(summary_keys, summary_location)
+    __init__()
         Initialize Summary instance.
-    add_summary(summary_keys, summary_location)
-        Adds summary keys and location.
-    summary_checker(allow_blank)
-        Validates summary information.
     """
-    def __init__(self, summary_keys=None, summary_location='final'):
+    def __init__(self):
         """
         Initialize Summary instance.
-        Args:
-            summary_keys (list): Keys to include in summary.
-            summary_location: Location for summary extraction.
         """
-        
-        self.add_summary(summary_keys, summary_location)
-        self.summary_checker(allow_blank=True)
-
-    def add_summary(self, summary_keys=None, summary_location='final'):
-        """
-        Adds summary keys and location.
-        Args:
-            summary_keys (list): Keys to include in summary.
-            summary_location: Location for summary extraction.
-        """
-        self.summary_keys = summary_keys if summary_keys is not None else []
-        self.summary_location = summary_location
-    def summary_checker(self,allow_blank = False):
-        """
-        Validates summary information.
-        Args:
-            allow_blank (bool): If True, allows blank summary.
-        Raises:
-            TypeError, ValueError: For invalid types or missing required values.
-        """
-        if allow_blank and len(self.summary_keys) == 0:
-            return
-        for key in self.summary_keys:
-            if not isinstance(key, str):
-                raise TypeError("Each item in summary_keys must be a string.")
-            if key == "":
-                raise ValueError("Each item in summary_keys must not be empty.")
-        if not isinstance(self.summary_location, (str, float, int)):
-            raise TypeError("summary_location must be a string, float, or int.")
+        self.summary = {}
 
 # ==============================================
 # RunInformation: Metadata tracking
@@ -713,7 +673,7 @@ class DataPoint2:
         Saves the data point to HDF5 format with proper structure.
     """
     def __init__(self,  lattice_location=None, lattice_files=None,
-                 observable_list=None, summary_keys=None, summary_location='final', ID="", run_information=None
+                 observable_list=None, ID="", run_information=None
                  ):
         """
         Initialize DataPoint2 instance.
@@ -735,7 +695,7 @@ class DataPoint2:
         #                      input_distribution_attrs=input_distribution_attrs)
         self.lattice = Lattice(lattice_location=lattice_location, lattice_files=lattice_files)
         self.observables = Observables(observable_list=observable_list)
-        self.summary = Summary(summary_keys=summary_keys, summary_location=summary_location)
+        self.summary = Summary()
         self.ID = ""
         self.run_information = RunInformation(run_information if run_information is not None else {})
         self.scalar_output_list = []
@@ -826,92 +786,27 @@ class DataPoint2:
         
         return self
 
-    def add_summary(self, summary_keys=None, summary_location='final'):
-        """
-        Adds summary information to the data point.
-        Args:
-            summary_keys: Keys to include in summary.
-            summary_location: Location for summary extraction.
-        Returns:
-            self: The DataPoint2 instance.
-        """
-        self.summary.add_summary(summary_keys, summary_location)
-        return self
+
     
     def get_summary(self):
         """
-        Extracts summary data for the data point based on specified summary keys.
+        Extracts summary data for the data point.
         
-        Handles two modes:
-        1. location_primary=True: Extracts data where the key matches data_names
-        2. location_primary=False: Extracts data at specific location from multi-location observables
+        Includes only ID and simulation metadata (if present).
         
         Returns:
             self: The DataPoint2 instance with populated summary.
         """
         summary = {}
-                
-        for key in self.summary.summary_keys:
-            for observable in self.observables:
-                # Case 1: location_primary=True (single location, key in data_names)
-                if (
-                    key in observable.data_names
-                    and observable.location_primary == True
-                ):
-                    # Check if this observable's location matches the requested summary_location
-                    loc = self.summary.summary_location
-                    obs_location = observable.location[0]  # Single location for location_primary=True
-                    
-                    # If summary_location is 'final', we need to find the last location with this key
-                    if loc == 'final':
-                        # Continue searching for the last occurrence
-                        data = np.squeeze(observable.data).tolist()
-                        if isinstance(data, (int, float, np.integer, np.floating)):
-                            data = [data]
-                        summary[key] = data
-                        # Don't break - keep looking for later occurrences
-                        continue
-                    elif obs_location == loc:
-                        # Location matches - extract data
-                        data = np.squeeze(observable.data).tolist()
-                        if isinstance(data, (int, float, np.integer, np.floating)):
-                            data = [data]
-                        summary[key] = data
-                        break
-                # Case 2: location_primary=False (multiple locations, extract at specific location)
-                elif key in observable.data_names and observable.location_primary == False:
-                    loc = self.summary.summary_location
-                    if loc == 'final':
-                        loc = observable.location[-1]
-                    if loc in observable.location:
-                        idx = next(i for i, l in enumerate(observable.location) if l == loc)
-                        # Handle both 1D (batch_dim=0) and 2D (batch_dim>0) data
-                        if observable.data.ndim == 1:
-                            # batch_dim=0: data is 1D array of values at different locations
-                            data = observable.data[idx]
-                            if isinstance(data, (int, float, np.integer, np.floating)):
-                                data = [data]
-                            else:
-                                data = [data]
-                        else:
-                            # batch_dim>0: data is 2D array (batch, locations)
-                            data = np.squeeze(observable.data[:,idx]).tolist()
-                            if isinstance(data, (int, float, np.integer, np.floating)):
-                                data = [data]
-                        summary[key] = data
-                        break
         summary["ID"] = self.ID
+        
         if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
-
             summary["simulation_start"] = self.simulation_metadata.simulation_start
             summary["simulation_end"] = self.simulation_metadata.simulation_end
             summary["simulation_code"] = self.simulation_metadata.simulation_code
             summary["simulation_version"] = self.simulation_metadata.simulation_version
-            # "simulation_input_file": self.simulation_metadata.simulation_input_file
         
-        # print(summary)
         self.summary.summary = summary
-        self.summary.summary_keys = list(summary.keys())
         return self
 
     def checker(self):
@@ -934,7 +829,6 @@ class DataPoint2:
         self.lattice.lattice_checker()
         self.observables.observable_checker()
         self.run_information.run_info_checker()
-        self.summary.summary_checker()
         if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
             self.simulation_metadata.sim_data_checker()
         return self
@@ -1123,9 +1017,8 @@ class DataPoint2:
             f.attrs["run_information_notes"] = self.run_information.notes
             f.attrs["Data_Standard_Version"] = VERSION
             
-            # Save summary keys as attributes
-            for key in self.summary.summary_keys:
-                value = getattr(self.summary, "summary", {}).get(key, "")
+            # Save summary data as attributes
+            for key, value in self.summary.summary.items():
                 # Convert to appropriate type for HDF5 attributes
                 if isinstance(value, list):
                     if value:  # non-empty list
@@ -1144,7 +1037,6 @@ class DataPoint2:
                     f.attrs[key] = value
                 else:
                     f.attrs[key] = str(value)
-            f.attrs["summary_location"] = self.summary.summary_location
 
 # ==============================================
 # SimulationMetadata: Simulation-specific data
@@ -1256,18 +1148,18 @@ class SimulatedDataPoint2(DataPoint2):
 
     Methods
     -------
-    __init__(lattice_location, lattice_files, observable_list, summary_keys, summary_location, ID, run_information, simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version)
+    __init__(lattice_location, lattice_files, observable_list, ID, run_information, simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version)
         Initialize SimulatedDataPoint2 instance with simulation metadata.
     add_simulation_data(simulation_start, simulation_end, simulation_code, simulation_input_file, simulation_version)
         Adds or updates simulation metadata.
 
     Inherited Methods
     -----------------
-    make_ID, add_lattice, add_run_information, add_observable, add_summary, get_summary, checker, finalize, saveHDF5
+    make_ID, add_lattice, add_run_information, add_observable, get_summary, checker, finalize, saveHDF5
         See DataPoint2 for details.
     """
     def __init__(self, lattice_location=None, lattice_files=None,
-                 observable_list=None, summary_keys=None, summary_location='final', ID="", run_information=None,
+                 observable_list=None, ID="", run_information=None,
                  simulation_start=None, simulation_end=None, simulation_code="", simulation_input_file="",simulation_version=""):
         """
         Initialize SimulatedDataPoint2 instance.
@@ -1277,8 +1169,6 @@ class SimulatedDataPoint2(DataPoint2):
             lattice_location: Location of the lattice.
             lattice_files: Lattice files or their contents.
             output_list: List of output dictionaries.
-            summary_keys: Keys to include in summary.
-            summary_location: Location for summary extraction.
             ID (str): Unique identifier.
             run_information: Run metadata.
             outputs: Outputs list.
@@ -1289,7 +1179,7 @@ class SimulatedDataPoint2(DataPoint2):
             simulation_code (str): Simulation code name.
             simulation_input_file (str): Input file for simulation.
         """
-        super().__init__(lattice_location=lattice_location, lattice_files=lattice_files, observable_list=observable_list, summary_keys=summary_keys, summary_location=summary_location, ID=ID, run_information=run_information)
+        super().__init__(lattice_location=lattice_location, lattice_files=lattice_files, observable_list=observable_list, ID=ID, run_information=run_information)
         
         self.simulation_metadata = SimulationMetadata(
             simulation_start=str(simulation_start) if simulation_start is not None else "",

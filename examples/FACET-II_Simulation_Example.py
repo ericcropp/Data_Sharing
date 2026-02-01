@@ -399,14 +399,6 @@ def add_datapoints(batch_dim,
     # Add lattice configuration files (rfdata files, YAML templates, etc.)
     D.add_lattice(lattice_location='included', lattice_files=rfdata_contents)
     
-    # Configure summary keys - include input parameters and key output metrics
-    summary_keys = list(data_dicts[0].keys())
-    if 'norm_emit_x' in I_list[0].output['stats']:
-        summary_keys.append('norm_emit_x')
-    D.add_summary(
-        summary_keys=summary_keys,
-        summary_location='final')
-    
     # Add run metadata (source, date, notes)
     D.add_run_information(source=run_info['source'], date=run_info['date'], notes=run_info['notes'])
     

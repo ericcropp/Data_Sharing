@@ -168,9 +168,6 @@ metadata = {'source': 'Argonne Wakefield Accelerator',
             'date': '2023-10-01',
             'notes': 'Example data point from AWA experiment'}
 
-# Parameters to include in summary output for quick querying
-summary_keys = ['total_intensity']
-
 # ========================================
 # Helper functions
 # ========================================
@@ -296,7 +293,6 @@ def main():
 
             D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
             D.finalize()
-            D.add_summary(summary_keys, summary_location='final')
 
             os.makedirs(args.output_dir, exist_ok=True)
             # Save data point to HDF5

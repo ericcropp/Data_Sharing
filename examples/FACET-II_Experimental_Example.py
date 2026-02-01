@@ -279,15 +279,6 @@ scalar_output_cols = {
     'TCAV:IN20:490:TC0_C_1_TCTL': 'unitless'}
 
 # ========================================
-# Summary configuration
-# ========================================
-# List of keys to include in summary output for quick overview
-# These are extracted from the data and saved as file attributes for easy querying
-# Consider moving this to a YAML file (e.g., 'summary_config.yaml')
-summary_keys = ['XRMS', 'YRMS']  # Beam RMS sizes from camera
-summary_location = loc_dict['PROF:IN10:571']  # Location of the profile screen
-
-# ========================================
 # Lattice and run metadata
 # ========================================
 # URL to the lattice definition repository
@@ -308,7 +299,7 @@ summary_table = []
 # ========================================
 
 def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar_output_cols, metadata,
-                   output_dir, lattice_location=lattice_location, loc_dict=loc_dict, summary_keys=summary_keys,
+                   output_dir, lattice_location=lattice_location, loc_dict=loc_dict,
                    summary_table=summary_table):
     """
     Process experimental data for one or more shots and save to HDF5 file.
@@ -320,7 +311,6 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
     - Scalar output parameters (BPM positions, beam size, charge, etc.)
     - Lattice information and device location mapping
     - Run metadata
-    - Summary statistics
     
     Args:
         batch_dim (int): Number of batch dimensions (0 for no batching).
@@ -333,7 +323,6 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
         output_dir (str): Directory path where HDF5 files will be saved.
         lattice_location (str): URL or path to lattice definition.
         loc_dict (dict): Dictionary mapping PV names to lattice element names.
-        summary_keys (list): List of keys to include in summary output.
         summary_table (list): List to append summary information to (modified in-place).
     
     Returns:
@@ -370,10 +359,6 @@ def add_datapoints(batch_dim, VCC, data_subset, image_subset, input_cols, scalar
         date=metadata['date'], 
         notes=metadata['notes']
     )
-    
-    # Add summary information for quick querying
-    # This extracts specified keys and saves them as file attributes
-    D.add_summary(summary_keys, summary_location=summary_location)
     
     # Save data point to HDF5 file
     os.makedirs(output_dir, exist_ok=True)
@@ -465,7 +450,6 @@ def main():
             output_dir=args.output_dir,
             lattice_location=lattice_location,
             loc_dict=loc_dict,
-            summary_keys=summary_keys,
             summary_table=summary_table
         )
         print(f"  Processed shot {i+1}/5")
@@ -488,7 +472,6 @@ def main():
         output_dir=args.output_dir,
         lattice_location=lattice_location,
         loc_dict=loc_dict,
-        summary_keys=summary_keys,
         summary_table=summary_table
     )
     print("  Processed batch of 5 shots")
