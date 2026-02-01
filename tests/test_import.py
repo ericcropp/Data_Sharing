@@ -108,7 +108,6 @@ def test_datapoint2_basic_api():
         'add_observable',
         'add_lattice',
         'add_run_information',
-        'add_summary',
         'make_ID',
         'get_summary',
         'checker',
