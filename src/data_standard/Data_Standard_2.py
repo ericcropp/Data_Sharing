@@ -137,6 +137,16 @@ def unit_checker(unit):
     prefix = 1
     if not isinstance(unit, str):
         raise ValueError("unit must be a string, received type: {}".format(type(unit)))
+    
+    # Handle ASCII 'u' as alias for micro 'µ' (common in many contexts where Unicode is problematic)
+    if unit.startswith('u') and len(unit) > 1:
+        # Check if 'u' followed by a known unit (e.g., 'um', 'us', 'uA')
+        base_unit = unit[1:]
+        if base_unit in units.known_unit:
+            valid_unit = units.known_unit[base_unit]
+            prefix = 1e-6  # micro = 1e-6
+            return float(prefix), valid_unit
+    
     if unit in units.known_unit.keys():
         valid_unit = units.known_unit[unit]
         prefix = 1
@@ -307,6 +317,21 @@ class SingleObservable:
                 raise ValueError(f"For non-scalar data (num_feature_dims={self.num_feature_dims}), 'bin_size' must be specified in attrs")
             if 'offset' not in self.attrs:
                 raise ValueError(f"For non-scalar data (num_feature_dims={self.num_feature_dims}), 'offset' must be specified in attrs")
+            
+            # Coerce bin_size and offset to floats
+            try:
+                self.attrs['bin_size'] = float(self.attrs['bin_size'])
+            except (ValueError, TypeError) as e:
+                raise TypeError(f"bin_size must be convertible to float, got {type(self.attrs['bin_size'])}: {e}")
+            
+            try:
+                self.attrs['offset'] = float(self.attrs['offset'])
+            except (ValueError, TypeError) as e:
+                raise TypeError(f"offset must be convertible to float, got {type(self.attrs['offset'])}: {e}")
+            
+            # Assert that bin_size and offset are floats
+            assert isinstance(self.attrs['bin_size'], float), f"bin_size must be float, got {type(self.attrs['bin_size'])}"
+            assert isinstance(self.attrs['offset'], float), f"offset must be float, got {type(self.attrs['offset'])}"
 
         if self.location_primary:
             if len(location) != 1:
@@ -340,6 +365,21 @@ class SingleObservable:
             return tuple()
         expected_prefix_dims = len(self.batch_dims) + self.num_length_dim
         return self.data.shape[expected_prefix_dims:expected_prefix_dims + self.num_feature_dims]
+    
+    @property
+    def units_str(self):
+        """String representation of units for serialization."""
+        if isinstance(self.units, str):
+            return self.units
+        return getattr(self.units, "unitSymbol", str(self.units))
+    
+    @property
+    def has_particlegroup(self):
+        """Check if data contains ParticleGroup objects."""
+        if self.data is None or self.data.size == 0:
+            return False
+        flat_data = self.data.flatten()
+        return any(isinstance(item, ParticleGroup) for item in flat_data)
 
     def data_dim_checker(self):
         """
@@ -474,6 +514,16 @@ class Lattice:
         self.PV_table = PV_table if PV_table is not None else {}
         if self.lattice_files and isinstance(self.lattice_files, list) and all(isinstance(f, str) for f in self.lattice_files):
             self.process_lattice_files(self.lattice_files)
+    
+    @property
+    def has_included_files(self):
+        """Check if lattice files are included."""
+        return self.lattice_location == 'included'
+    
+    @property
+    def is_empty(self):
+        """Check if lattice is empty."""
+        return (self.lattice_location is None or self.lattice_location == "") and len(self.lattice_files) == 0
 
     def lattice_checker(self,allow_blank = False):
         """
@@ -805,6 +855,11 @@ class DataPoint2:
         
         self.ID = hasher.hexdigest()
         return self
+    
+    @property
+    def filename(self):
+        """Generated filename based on ID."""
+        return f"{self.ID}.h5"
 
     def add_lattice(self, lattice_location=None, lattice_files=None, PV_table=None):
         """
@@ -962,9 +1017,9 @@ class DataPoint2:
         
         # Determine output filename
         if fileloc is None:
-            filename = f"{self.ID}.h5"
+            filename = self.filename
         elif os.path.isdir(fileloc):
-            filename = os.path.join(fileloc, f"{self.ID}.h5")
+            filename = os.path.join(fileloc, self.filename)
         else:
             filename = fileloc
         
@@ -1037,11 +1092,8 @@ class DataPoint2:
                                 f"Found {current_location} for '{observable.data_name}' but expected {existing_location}"
                             )
 
-                    flat_data = observable.data.flatten()
-                    has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
-                    
                     # Handle ParticleGroup objects specially
-                    if has_particlegroup:
+                    if observable.has_particlegroup:
                         # Write each ParticleGroup to its own HDF5 group with index-based naming
                         for idx in np.ndindex(observable.data.shape):
                             pg = observable.data[idx]
@@ -1064,11 +1116,8 @@ class DataPoint2:
                     # Set dataset attributes (no location here - it's in DATA_LOCATIONS)
                     out_grp.attrs["control"] = observable.control
                     out_grp.attrs["num_feature_dims"] = observable.num_feature_dims
-
-                    if isinstance(observable.units, str):
-                        out_grp.attrs["units"] = observable.units
-                    else:
-                        out_grp.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
+                    out_grp.attrs["units"] = observable.units_str
+                    out_grp.attrs["unit_multiplier"] = observable.unit_multiplier
 
                     for k, v in observable.attrs.items():
                         out_grp.attrs[k] = v
@@ -1086,11 +1135,8 @@ class DataPoint2:
                     else:
                         out_grp = observables_grp[location_str]
 
-                    flat_data = observable.data.flatten()
-                    has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
-                    
                     # Handle ParticleGroup data
-                    if has_particlegroup:
+                    if observable.has_particlegroup:
                         # Write each ParticleGroup to its own HDF5 group with index-based naming
                         for idx in np.ndindex(observable.data.shape):
                             pg = observable.data[idx]
@@ -1113,15 +1159,12 @@ class DataPoint2:
                     dataset.attrs["location"] = location_str
                     dataset.attrs["control"] = observable.control
                     dataset.attrs["num_feature_dims"] = observable.num_feature_dims
+                    dataset.attrs["units"] = observable.units_str
+                    dataset.attrs["unit_multiplier"] = observable.unit_multiplier
                     
                     # Assert that location in metadata matches group name
                     assert dataset.attrs["location"] == location_str, \
                         f"Location mismatch: group name is '{location_str}' but metadata has '{dataset.attrs['location']}'"
-                    
-                    if isinstance(observable.units, str):
-                        dataset.attrs["units"] = observable.units
-                    else:
-                        dataset.attrs["units"] = getattr(observable.units, "unitSymbol", str(observable.units))
                     
                     for k, v in observable.attrs.items():
                         dataset.attrs[k] = v

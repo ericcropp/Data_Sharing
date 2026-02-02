@@ -183,14 +183,14 @@ input_cols = {
     'KLYS:LI10:21:PDES': 'unitless',
     'KLYS:LI10:21:ADES': 'unitless',
  
- 'KLYS:LI10:31:PDES': 'unitless',
- 'KLYS:LI10:31:ADES': 'unitless',
- 
- 'KLYS:LI10:41:PDES': 'unitless',
- 'KLYS:LI10:41:ADES': 'unitless',
- 
-#  'KLYS:LI10:51:PHAS': 'unitless',
-#  'KLYS:LI10:51:AMPL': 'unitless',
+    'KLYS:LI10:31:PDES': 'unitless',
+    'KLYS:LI10:31:ADES': 'unitless',
+    
+    'KLYS:LI10:41:PDES': 'unitless',
+    'KLYS:LI10:41:ADES': 'unitless',
+    
+    #  'KLYS:LI10:51:PHAS': 'unitless',
+    #  'KLYS:LI10:51:AMPL': 'unitless',
 }
 #  'KLYS:LI20:51:BEAMCODE1_TCTL': 'unitless'}
 
@@ -332,8 +332,8 @@ def add_datapoints(batch_dims, VCC, data_subset, image_subset, input_cols, scala
     """
     # Create new data point object
     D = DataPoint2()
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'bin_size':data_subset['CAMR:LT10:900:RESOLUTION'].values.tolist(), 'offset': 0}, data_name='VCC_Image', units='um', location_primary=True, control=True)
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'bin_size':data_subset['PROF:IN10:571:RESOLUTION'].values.tolist(), 'offset': 0}, data_name='Screen_Image', units='um', location_primary=True, control=False)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'bin_size':float(data_subset['CAMR:LT10:900:RESOLUTION'].values[0]), 'offset': 0}, data_name='VCC_Image', units='um', location_primary=True, control=True)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'bin_size':float(data_subset['PROF:IN10:571:RESOLUTION'].values[0]), 'offset': 0}, data_name='Screen_Image', units='um', location_primary=True, control=False)
     # Populate scalar inputs for this shot
     for col in input_cols.keys():
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)
@@ -343,6 +343,7 @@ def add_datapoints(batch_dims, VCC, data_subset, image_subset, input_cols, scala
         
         D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=input_cols[col], data_name=':'.join(col.split(':')[3:]), location_primary=True, control=True)
     for col in scalar_output_cols.keys():
+        # print(f"Adding output observable: {col}")
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)
         # For single shots (len(batch_dims)==0), extract scalar value; for batches, keep as array
         if len(batch_dims) == 0:
