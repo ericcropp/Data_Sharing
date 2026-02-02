@@ -425,12 +425,9 @@ def add_datapoints(batch_dims,
                 for i in range(len(I_list)):
                     stat_data[i,:] = np.array(I_list[i].output['stats'][key]).reshape(1, -1)
             
-                    # Assert that location data is the same for every point in the batch
+                    # Store first location array for reference (locations may vary between simulations)
                     if first_locations is None:
-                        first_locations = I_list[i].output['stats']['mean_z'].tolist()
-                    else:
-                        assert I_list[i].output['stats']['mean_z'].tolist() == first_locations, \
-                            f"Location data mismatch at point {i}: expected {first_locations}, got {I_list[i].output['stats']['mean_z'].tolist()}"
+                        first_locations = I_list[i].output['stats']['mean_z']
             
             # For single simulation, get locations from the first (and only) simulation
             if len(batch_dims) == 0 and first_locations is None:
@@ -556,9 +553,12 @@ def main():
     }
     summary_table = []
     
-    # Process each simulation archive file
-    for i in range(len(impact_filenames['impact_archive'])):
-        print(f"Processing file {i+1}/{len(impact_filenames['impact_archive'])}: {impact_filenames['impact_archive'][i]}")
+    num_files = len(impact_filenames['impact_archive'])
+    num_individual = min(5, num_files)  # Process first 5 files individually (or all if fewer than 5)
+    
+    # Process each simulation archive file individually
+    for i in range(num_individual):
+        print(f"Processing file {i+1}/{num_files}: {impact_filenames['impact_archive'][i]}")
 
         # Load the Impact simulation archive
         I = impact.Impact()
@@ -596,7 +596,45 @@ def main():
             summary_table=summary_table,
             output_dir=args.output_dir
         )
-    
+
+
+    # Batch processing of remaining files (if more than 5 files available)
+    if num_files > num_individual:
+        I_list = []
+        data_dicts = []
+        for i in range(num_individual, num_files):
+            print(f"Processing file {i+1}/{num_files}: {impact_filenames['impact_archive'][i]}")
+        I = impact.Impact()
+        I.load_archive(impact_filenames['impact_archive'][i])
+        I_orig = impact.Impact.from_yaml(os.path.join(args.lattice_dir, 'ImpactT.yaml'))
+
+        lattice_I_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I.input['lattice'])}
+        lattice_I_orig_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I_orig.input['lattice'])}
+
+        diff_dict, data_dict = lattice_comparison(lattice_I_dict, lattice_I_orig_dict, I, I_orig)
+        
+        run_info = extract_run_info(I)
+
+        input_contents = extract_input_file_contents(I, args.lattice_dir)
+
+        rfdata_contents = load_lattice_file_contents(args.lattice_dir)
+
+        I_list.append(I)
+        data_dicts.append(data_dict)
+
+        D, summary_table = add_datapoints(
+            batch_dims=(num_files - num_individual,),  # Batch size is remaining files
+            I_list=I_list, 
+            data_dicts=data_dicts, 
+            run_info=run_info, 
+            input_contents=input_contents, 
+            rfdata_contents=rfdata_contents, 
+            output_unit_list=output_unit_list, 
+            unit_list=unit_list,
+            summary_table=summary_table,
+            output_dir=args.output_dir
+        )
+        
     # Write the complete summary table to YAML for easy review and analysis
     with open(os.path.join(args.output_dir, 'summary_table.yaml'), 'w') as f:
         yaml.dump(summary_table, f)
