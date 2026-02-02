@@ -394,7 +394,7 @@ def add_datapoints(batch_dims,
         final_particles_data = np.empty(num_pts, dtype=object)
         for i in range(len(I_list)):
             final_particles_data[i] = I_list[i].particles['final_particles']
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location='final_particles', data=final_particles_data, attrs={}, data_name='final_particles', units='m', location_primary=False, control=False)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=['final_particles'], data=final_particles_data, attrs={}, data_name='final_particles', units='m', location_primary=True, control=False)
     
     # Add lattice configuration files (rfdata files, YAML templates, etc.)
     D.add_lattice(lattice_location='included', lattice_files=rfdata_contents)
@@ -438,9 +438,9 @@ def add_datapoints(batch_dims,
 
             # Add observable with appropriate units
             if key in output_unit_list:
-                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_primary=False, control=False)
+                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_units='m', location_primary=False, control=False)
             else:
-                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units="unitless", location_primary=False, control=False)
+                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units="unitless", location_units='m', location_primary=False, control=False)
     
     # Verify consistency across all simulations in the batch
     # Assert all data_dicts have the same keys (all simulations should vary the same parameters)

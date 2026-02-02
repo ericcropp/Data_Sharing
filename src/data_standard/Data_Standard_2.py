@@ -205,7 +205,7 @@ class SingleObservable:
     to_dict()
         Returns a dictionary representation of the observable (for control parameters).
     """
-    def __init__(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_primary=True, control=False):
+    def __init__(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=False):
         """
         Initialize a SingleObservable instance.
         Args:
@@ -216,6 +216,7 @@ class SingleObservable:
             attrs (dict): Additional attributes.
             data_name (str): Name of the data field.
             units: Physical units.
+            location_units (str): Physical units for location data. Default None.
             location_primary (bool): Group by location if True.
             control (bool): True for control/input, False for measured/output.
         Raises:
@@ -293,6 +294,7 @@ class SingleObservable:
         self.batch_dims = batch_dims
         self.num_feature_dims = num_feature_dims
         self.location = location
+        self.location_units = location_units
         self.data_name = data_name
         self.location_primary = location_primary
         self.data = data
@@ -535,7 +537,7 @@ class Observables(list):
         for observable in observable_list:
             self.add_observable(observable["location"], observable["datum"], observable["control"], observable["num_shots"], observable["units"], observable.get("attrs"), observable.get("datum_name", ""),observable.get("location_primary", True))
 
-    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_primary=True, control=False):
+    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=False):
         """
         Adds an observable to the Observables list.
         Args:
@@ -546,6 +548,7 @@ class Observables(list):
             attrs (dict): Additional attributes.
             data_name (str): Name of the data field.
             units: Physical units.
+            location_units (str): Physical units for location data. Default None.
             location_primary (bool): Group by location if True.
             control (bool): True for control/input, False for measured/output.
         """
@@ -557,6 +560,7 @@ class Observables(list):
             attrs=attrs,
             data_name=data_name,
             units=units,
+            location_units=location_units,
             location_primary=location_primary,
             control=control
         )
@@ -826,7 +830,7 @@ class DataPoint2:
         self.run_information.add_run_information(source, date, notes)
         return self
 
-    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_primary=True, control=False):
+    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=False):
         """
         Adds an observable to the data point.
         Args:
@@ -837,12 +841,13 @@ class DataPoint2:
             attrs (dict): Additional attributes.
             data_name (str): Name of the data field.
             units: Physical units.
+            location_units (str): Physical units for location data. Default None.
             location_primary (bool): Group by location if True.
             control (bool): True for control/input, False for measured/output.
         Returns:
             self: The DataPoint2 instance.
         """
-        self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_primary=location_primary, control=control)
+        self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary=location_primary, control=control)
         
         return self
 
@@ -929,11 +934,13 @@ class DataPoint2:
         /observables/
             <location_name>/ (group, if location_primary=True)
                 <data_name> (dataset): Observable data
-                    Attributes: location, control, units, custom attrs
+                    Attributes: location, control, units, num_feature_dims, custom attrs
                 <data_name>_<i>_<j>_... (group): ParticleGroup data matching batch_dims indices
-            Type_Grouped_Data/ (group, if location_primary=False)
+            multi_location_data/ (group, if location_primary=False)
+                DATA_LOCATIONS (dataset): Location data for all datasets in this group
+                    Attributes: units (location units), num_feature_dims
                 <data_name> (dataset): Observable data array
-                    Attributes: location (array), control, units, custom attrs
+                    Attributes: control, units, num_feature_dims, custom attrs
                 <data_name>_<i>_<j>_... (group): ParticleGroup data matching batch_dims indices
         
         Root Attributes:
@@ -983,14 +990,52 @@ class DataPoint2:
             # Save observables
             # ==========================================
             observables_grp = f.create_group("observables")
+            
+            # Collect observables by location_primary for validation
+            multi_loc_observables = [obs for obs in self.observables if not obs.location_primary]
+            
+            # Validate that all multi_location_data observables have same num_feature_dims
+            if multi_loc_observables:
+                first_num_feature_dims = multi_loc_observables[0].num_feature_dims
+                for obs in multi_loc_observables:
+                    if obs.num_feature_dims != first_num_feature_dims:
+                        raise ValueError(
+                            f"All observables in multi_location_data must have same num_feature_dims. "
+                            f"Found {obs.num_feature_dims} for '{obs.data_name}' but expected {first_num_feature_dims}"
+                        )
+            
             for i, observable in enumerate(self.observables):
 
                 if observable.location_primary == False:
-                    # Create or get the "Type_Grouped_Data" group
-                    if "Type_Grouped_Data" not in observables_grp:
-                        type_grouped_grp = observables_grp.create_group("Type_Grouped_Data")
+                    # Create or get the "multi_location_data" group
+                    if "multi_location_data" not in observables_grp:
+                        multi_loc_grp = observables_grp.create_group("multi_location_data")
+                        
+                        # Create DATA_LOCATIONS dataset on first observable
+                        location_value = observable.location if isinstance(observable.location, np.ndarray) else np.array(observable.location)
+                        # Handle string arrays for HDF5
+                        if location_value.dtype.kind in ['U', 'O']:  # Unicode or Object dtype
+                            loc_dataset = multi_loc_grp.create_dataset("DATA_LOCATIONS", data=location_value.astype('S'))
+                        else:
+                            loc_dataset = multi_loc_grp.create_dataset("DATA_LOCATIONS", data=location_value)
+                        loc_dataset.attrs["units"] = observable.location_units
+                        loc_dataset.attrs["num_feature_dims"] = observable.num_feature_dims
                     else:
-                        type_grouped_grp = observables_grp["Type_Grouped_Data"]
+                        multi_loc_grp = observables_grp["multi_location_data"]
+                        
+                        # Verify location consistency
+                        existing_location = multi_loc_grp["DATA_LOCATIONS"][:]
+                        current_location = observable.location if isinstance(observable.location, np.ndarray) else np.array(observable.location)
+                        # Handle string comparison
+                        if existing_location.dtype.kind == 'S':
+                            existing_location = existing_location.astype('U')
+                        if current_location.dtype.kind in ['U', 'O']:
+                            current_location = current_location.astype('S').astype('U')
+                        if not np.array_equal(existing_location, current_location):
+                            raise ValueError(
+                                f"All observables in multi_location_data must have same location. "
+                                f"Found {current_location} for '{observable.data_name}' but expected {existing_location}"
+                            )
 
                     flat_data = observable.data.flatten()
                     has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
@@ -1007,18 +1052,16 @@ class DataPoint2:
                             else:
                                 idx_str = '_'.join(map(str, idx))
                             path = observable.data_name + '_' + idx_str
-                            pg_grp = type_grouped_grp.create_group(path)
+                            pg_grp = multi_loc_grp.create_group(path)
                             pg.write(pg_grp)
                         # Note: No dataset needed - ParticleGroups are directly accessible by index
                         # Skip attribute setting for ParticleGroups as they don't have a dataset
                         continue
                     else:
                         # Regular numeric data
-                        out_grp = type_grouped_grp.create_dataset(observable.data_name, data=np.array(observable.data))
+                        out_grp = multi_loc_grp.create_dataset(observable.data_name, data=np.array(observable.data))
 
-                    # Set dataset attributes (location, control, units, feature_dims)
-                    location_value = observable.location.tolist() if isinstance(observable.location, np.ndarray) else observable.location
-                    out_grp.attrs["location"] = location_value
+                    # Set dataset attributes (no location here - it's in DATA_LOCATIONS)
                     out_grp.attrs["control"] = observable.control
                     out_grp.attrs["num_feature_dims"] = observable.num_feature_dims
 
