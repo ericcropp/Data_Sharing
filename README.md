@@ -132,6 +132,8 @@ D.saveHDF5('./output/')
 
 ## Data Structure
 
+This is a summary.  The authoritative standard lives in SPEC.md.  
+
 The HDF5 file structure follows this hierarchy:
 
 ```
