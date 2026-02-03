@@ -1,16 +1,102 @@
-(Documentation under construction)
+# Data Standard Specification
 
-TODO: philosophy: multiple shots per batch (share lattice and some logical connection), multiple batches per file (share lattice), choice whether to make new batch or new file, etc up to user.  
+**Version:** 2026-01-26  
+**Document Status:** Complete Technical Specification
 
-Definitions:
-    1) Shot: A single run of the accelerator or simulation code
-    2) Batch: An N-dimensional set of shots (i.e. scanning a single quadrupole from -5 T/m to 5 T/m in 1 T/m steps is a 1-D batch).  This standard can accomodate any dimension, including 0 --> a single data point.
-    3) Lattice
-    4) Observable
-    5) Feature dimensions
+---
 
+## Table of Contents
 
-A single file can contain multiple batches.  To comply with this standard, the data must be stored in hierarchical data format (HDF5).  Here is a diagram of such a file:
+- [Overview](#overview)
+- [Core Principles](#core-principles)
+  - [1. Observable-Centric Design](#1-observable-centric-design)
+  - [2. Flexible Dimensionality](#2-flexible-dimensionality)
+  - [3. Location-Based Organization](#3-location-based-organization)
+  - [4. ParticleGroup & Data Support](#4-particlegroup--data-support)
+- [Definitions](#definitions)
+- [HDF5 File Structure](#hdf5-file-structure)
+- [Detailed Specification](#detailed-specification)
+  - [Root Level Structure](#root-level-structure)
+  - [Lattice Group](#lattice-group)
+  - [Batch Groups](#batch-groups)
+  - [Observables Group](#observables-group)
+    - [Pattern 1: Location-Primary Storage](#pattern-1-location-primary-storage)
+    - [Pattern 2: Multi-Location Storage](#pattern-2-multi-location-storage)
+  - [ParticleGroup Storage](#particlegroup-storage)
+  - [Data Type Requirements](#data-type-requirements)
+  - [Dimension Validation](#dimension-validation)
+  - [Unit Handling](#unit-handling)
+- [Validation Rules](#validation-rules)
+- [Implementation Notes](#implementation-notes)
+
+---
+
+## Overview
+
+This document defines a standardized format for storing accelerator physics data in HDF5 files. The standard supports both experimental and simulation data, with flexible dimensionality for batch processing and feature-rich observables.
+
+**Key Features:**
+- Hierarchical HDF5 storage with rich metadata
+- Support for scalar, vector, and multi-dimensional observables
+- Integration with openPMD-beamphysics ParticleGroup format
+- Flexible location-based or multi-location data organization
+- Comprehensive unit handling with SI prefix support
+- Summary metadata for dataset discovery and filtering
+
+**Defining Implementation:**
+- `src/data_standard/Data_Standard_2.py`: Classes that generate intermediate files 
+- `src/data_standard/Combine_Files.py`: Utility for finalizing a single HDF5 file that is compliant with the data standard defined below
+- Three examples are in `examples/`.  See `README.md` for how to run those examples.
+
+---
+
+## Core Principles
+
+### 1. Observable-Centric Design
+All physical quantities are stored as **observables** with associated metadata:
+- `data_name`: Unique identifier for the observable
+- `units`: Physical units with prefix support
+- `location`: Where the measurement/simulation occurred
+- `control`: Boolean indicating if this is an input (control) or output parameter
+- `batch_dims`: Tuple defining batch structure
+- `num_feature_dims`: Integer count of feature dimensions
+
+### 2. Flexible Dimensionality
+Data can have multiple dimension types:
+- **Batch dimensions** (`batch_dims`): Independent experimental/simulation runs
+- **Feature dimensions** (`num_feature_dims`): Intrinsic data structure (images, spectra, etc.)
+- **Location dimensions**: Multiple observation points along beamline
+
+### 3. Location-Based Organization
+Two storage patterns:
+- **`location_primary=True`**: Data grouped by location (each location is a separate HDF5 group)
+- **`location_primary=False`**: Data grouped by type with shared location array
+
+### 4. ParticleGroup & Data Support
+- **Scalar/array data**: Stored as HDF5 datasets
+- **ParticleGroups**: Stored using openPMD-beamphysics native format
+
+---
+
+## Definitions
+
+**Shot:** A single run of the accelerator or simulation code
+
+**Batch:** An N-dimensional set of shots (i.e. scanning a single quadrupole from -5 T/m to 5 T/m in 1 T/m steps is a 1-D batch). This standard can accommodate any dimension, including 0 → a single data point.
+
+**Lattice:** Configuration defining the accelerator beamline elements and their properties.  All observables' locations must be specified by this lattice.  
+
+**Observable:** A quantity measured or computed at specific location(s) along the beamline.  Notably, these can be inputs or outputs (specify with control boolean; see below)
+
+**Feature dimensions:** Intrinsic dimensions of the data beyond batch and location (e.g., pixels in an image, bins in a spectrum)
+
+---
+
+## HDF5 File Structure
+
+Almost always, there will be multiple shots per batch.  These shots must share a lattice and some logical connection (flexibility left to the end user).  The HDF5 file can also contain multiple batches per file (they must share a lattice).  The choice of how to group the shots (in the same batch, the same file, or completely separate file) is left up to the user and all choices can comply with this data standard.  The authoritative requirements of HDF5 files in this data standard are listed below.    
+
+To comply with this standard, the data must be stored in hierarchical data format (HDF5).  Here is a diagram of such a file:
 
 The HDF5 file structure for combined files follows this hierarchy:
 
@@ -58,6 +144,7 @@ The HDF5 file structure for combined files follows this hierarchy:
                 └── @unit_multiplier        # Dataset attribute: Prefix multiplier
 ```
 
+---
 
 ## Detailed Specification
 
@@ -90,7 +177,7 @@ The HDF5 file structure for combined files follows this hierarchy:
 - **Requirement:** Must be one of the four allowed values
 - **Rule:** When `"included"`, `lattice_files/` subgroup must exist and be non-empty
 - **Rule:** When an external reference is given, no file datasets should be stored
-TODO Add rule about how this must be true for ALL batches included in file
+- **Rule:** All batches in a combined file must share the same lattice_location value and lattice configuration
 
 **Subgroups:**
 
@@ -99,7 +186,7 @@ TODO Add rule about how this must be true for ALL batches included in file
 - **Requirement:** Present when `@lattice_location = "included"`
 - **Content:** One dataset per file, with filename as dataset name
 - **File Content Type:** String or bytes
-TODO Add rule about how this must be true for ALL batches included in file
+- **Rule:** All batches in a combined file must have identical lattice files
 
 ### Batch Groups
 
@@ -207,9 +294,11 @@ Two storage patterns are supported:
 
 ##### @units
 - **Type:** String
-- **Requirement:** Must be valid unit string recognized by openPMD-beamphysics
+- **Requirement:** Should be valid unit string recognized by openPMD-beamphysics, but custom units are allowed
 - **Format:** Base unit without prefix (e.g., "m" not "um")
-- **Special Case:** "particlegroup" for ParticleGroup data # TODO Check this -- custom units, unitless, etc
+- **Dimensionless:** Use "1" for unitless/dimensionless quantities
+- **Custom Units:** Non-recognized units (e.g., "unitless", "counts") are stored as-is with unit_multiplier=1.0
+- **ParticleGroup Data:** Units attribute is not stored for ParticleGroup datasets; units are embedded in the ParticleGroup's own metadata
 
 ##### @unit_multiplier  
 - **Type:** Float
@@ -223,20 +312,16 @@ Two storage patterns are supported:
 ##### @bin_size
 - **Type:** Float
 - **Requirement:** Required when num_feature_dims > 0
-- **Requirement:** Must be positive (> 0) # CHeck this --> it should not need to be positive
 - **Purpose:** Physical size of one bin/pixel in feature space
 - **Units:** Match observable units
-- **Examples:**
-  - Image: pixel size in meters
-  - Spectrum: energy bin width in eV
-  - Time series: time step in seconds
+- **Note:** Can be positive or negative (negative for reversed coordinate axes)
 
 ##### @offset
 - **Type:** Float
 - **Requirement:** Required when num_feature_dims > 0
 - **Purpose:** Physical coordinate of first bin/pixel
 - **Units:** Match observable units
-- **Can be:** Negative, zero, or positive
+- **Can be:** Any float
 - **Coordinate calculation:** `coord[i] = offset + i * bin_size`
 
 #### Pattern 2: Multi-Location Storage
@@ -333,29 +418,68 @@ batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., init
 3. Look up prefix multiplier (e.g., 'p' → 1e-12)
 4. Extract base unit (e.g., 'pC' → 'C')
 5. Validate base unit with openPMD-beamphysics
+6. If unit is not recognized, treat as custom unit
 
 #### Supported Prefixes
 **SI Prefixes:** y, z, a, f, p, n, µ, m, c, d, da, h, k, M, G, T, P, E, Z, Y
 **ASCII Alias:** 'u' accepted for 'µ' (micro)
 
 #### Storage
+
+**Recognized Units:**
 - `@units`: Base unit string (e.g., "C" for coulombs)
 - `@unit_multiplier`: Numeric multiplier (e.g., 1e-12 for pC → C)
 
+**Custom/Unrecognized Units:**
+- `@units`: Original unit string as provided (e.g., "unitless", "counts", "arb")
+- `@unit_multiplier`: 1.0 (no conversion)
 
+---
 
-#### Validation Rules
-- No duplicate IDs allowed
-- All data points must use same Data_Standard_Version
-- All lattices must be identical (after exclusions)
+## Validation Rules
 
+The following rules are enforced when creating and combining HDF5 files:
 
+**File-Level Rules:**
+- No duplicate IDs allowed within a file
+- All IDs must be non-empty and follow the format `<DataType>_<8-char-hash>`
+- Root @Data_Standard_Version must match all batch @Data_Standard_Version attributes
+
+**Lattice Rules:**
+- All batches in a combined file must share identical lattice configurations
+- When @lattice_location is "included", lattice_files/ subgroup must be non-empty
+
+**Batch Rules:**
+- batch_dims product must equal actual number of data points
+- All elements in batch_dims must be positive integers (> 0)
+- Empty batch_dims `()` indicates a single data point
+
+**Observable Rules:**
+- control attribute must be boolean type
+- num_feature_dims must be >= 0
+- When num_feature_dims > 0, bin_size and offset must be specified
+- unit_multiplier must be positive (> 0)
+
+**Multi-Location Rules:**
+- All observables in multi_location_data must share identical DATA_LOCATIONS
+- location_units must be specified for multi-location data
+
+**ParticleGroup Rules:**
+- Container must be numpy object array with dtype='object'
+- All elements must be ParticleGroup instances
+- Shape must match batch_dims exactly (no location or feature dims)
+
+**Data Type Rules:**
+- Regular numeric data: float32, float64, int32, int64
+- Data shape must match: batch_dims + (num_locations,) + feature_dims
+
+---
 
 ## Implementation Notes
 
-This specification defines the data standard by describing the HDF5 file structure and validation rules. The Python implementation in `src/data_standard/Data_Standard_2.py` serves as the reference implementation but is not definitive. The HDF5 file format itself is the authoritative standard.
+This specification defines the data standard by describing the HDF5 file structure and validation rules. The Python implementation in `src/data_standard/Data_Standard_2.py` and `src/data_standard/Combine_Files.py` serves as the reference implementation but is not definitive. The HDF5 file format itself is the authoritative standard.
 
 
-- **README.md**: Quick start guide and API overview
+- **README.md**: Quick start guide and API overview and how to use the examples
 
 

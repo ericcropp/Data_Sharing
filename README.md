@@ -20,7 +20,7 @@ This project defines a **minimal, evolving standard** for storing such data, alo
 - **Metadata tracking**: Lattice, simulation, and run information
 - **HDF5 storage**: Efficient, hierarchical data storage
 - **Validation utilities**: Automatic checking of data dimensions and units
-- **Combining tools**: Merge multiple data points into unified datasets
+- **Combining tools**: Merge multiple batches into unified files that **match the rules of the data standard**
 
 
 ## Scope
@@ -101,25 +101,25 @@ D = DataPoint2()
 
 # Add a scalar observable (e.g., beam charge)
 D.add_observable(
-    batch_dims=0,
-    feature_dims=0,  # scalar
+    batch_dims=(),  # Empty tuple for single data point
+    num_feature_dims=0,  # scalar
     location=['ICT1'],
-    data=np.array([250.0]),  # pC
-    data_names=['charge'],
+    data=np.array(250.0),  # 0-D array for scalar
+    data_name='charge',
     units='pC',
     control=False
 )
 
 # Add a 2D image (e.g., screen image)
-image_array = np.zeros((100,200))
+image_array = np.zeros((100, 200))
 D.add_observable(
-    batch_dims=0,
-    feature_dims=2,  # 2D image
+    batch_dims=(),
+    num_feature_dims=2,  # 2D image
     location=['Screen1'],
     data=image_array,
-    data_names=['image'],
+    data_name='image',
     units='counts',
-    attrs={'pxcal': 1e-6}  # pixel calibration
+    attrs={'bin_size': 1e-6, 'offset': 0.0}  # Required for feature dims > 0
 )
 
 # Add lattice and metadata
