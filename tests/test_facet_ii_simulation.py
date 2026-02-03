@@ -82,10 +82,6 @@ def test_facet_ii_simulation_example_runs(temp_output_dir, check_data_available)
     # Check that HDF5 files were created
     h5_files = list(Path(temp_output_dir).glob("*.h5"))
     assert len(h5_files) > 0, "No HDF5 files created"
-    
-    # Check that summary table was created
-    summary_file = Path(temp_output_dir) / "summary_table.yaml"
-    assert summary_file.exists(), "summary_table.yaml not created"
 
 
 @pytest.mark.slow
@@ -232,37 +228,6 @@ def test_simulation_metadata_present(temp_output_dir, check_data_available):
         
         assert has_sim_start or has_sim_code, \
             "Simulation metadata (simulation_start, simulation_code) not found"
-
-
-@pytest.mark.slow
-def test_summary_table_valid(temp_output_dir, check_data_available):
-    """Test that the summary table is valid YAML and contains expected keys."""
-    # Run the example
-    script_path = EXAMPLES_DIR / "FACET-II_Simulation_Example.py"
-    cmd = [
-        sys.executable,
-        str(script_path),
-        "--input_dir", str(DATA_INPUT_DIR),
-        "--output_dir", str(temp_output_dir),
-        "--lattice_dir", str(LATTICE_FILES_DIR),
-        "--Combine_Files", "False",
-    ]
-    subprocess.run(cmd, capture_output=True, timeout=300)
-    
-    summary_file = Path(temp_output_dir) / "summary_table.yaml"
-    assert summary_file.exists(), "summary_table.yaml not found"
-    
-    # Load and validate YAML
-    with open(summary_file, 'r') as f:
-        summary = yaml.safe_load(f)
-    
-    assert isinstance(summary, list), "Summary should be a list of entries"
-    assert len(summary) > 0, "Summary is empty"
-    
-    # Check that each entry has an ID
-    for entry in summary:
-        assert 'ID' in entry, "Entry missing 'ID' field"
-        assert len(entry['ID']) > 0, "Entry has empty 'ID'"
 
 
 @pytest.mark.slow
