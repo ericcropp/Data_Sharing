@@ -477,14 +477,9 @@ def main():
     )
     print("  Processed batch of 5 shots")
     
-    # Write summary table to YAML for easy review and querying
-    summary_file = os.path.join(args.output_dir, 'summary_table.yaml')
-    with open(summary_file, 'w') as f:
-        yaml.dump(summary_table, f)
-    
     print(f"\nProcessing complete. {len(summary_table)} shots processed.")
     print(f"HDF5 files saved to {args.output_dir}")
-    print(f"Summary table saved to {summary_file}")
+    
     # Combine files into a single HDF5 file
     if args.Combine_Files.lower() == 'true':
         print("Combining processed files into a single HDF5 file...")
@@ -497,7 +492,7 @@ def main():
         combined_path = os.path.join(args.output_dir, 'Combined_Data.h5')
         combine_files(args.output_dir, combined_path)
         
-        # Delete individual files, keeping only Combined_Data.h5 and summary_table.yaml
+        # Delete individual files, keeping only Combined_Data.h5
         for filename in individual_files:
             file_path = os.path.join(args.output_dir, filename)
             try:

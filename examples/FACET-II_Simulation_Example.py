@@ -274,7 +274,7 @@ def extract_input_file_contents(I, lattice_dir):
     
     This function writes the Impact simulation configuration to a temporary input file,
     then reads and returns its contents as a string. The temporary file is created in
-    the specified lattice directory.
+    the specified lattice directory and deleted after reading.
     
     Args:
         I (impact.Impact): Lume-Impact simulation object.
@@ -284,9 +284,14 @@ def extract_input_file_contents(I, lattice_dir):
         str: Complete contents of the generated Impact input file.
     """
     # Write Impact input file to temporary location and read it back
+    temp_file = os.path.join(lattice_dir, 'Temp.in')
     I.write_input(input_filename='Temp.in', path=lattice_dir)
-    with open(os.path.join(lattice_dir, 'Temp.in'), 'r') as f_input:
+    with open(temp_file, 'r') as f_input:
         input_contents = f_input.read()
+    
+    # Remove temporary file after reading
+    os.remove(temp_file)
+    
     return input_contents
 
 def load_lattice_file_contents(lattice_dir):
@@ -295,6 +300,7 @@ def load_lattice_file_contents(lattice_dir):
     
     Reads all regular files in the specified directory and returns their contents
     as a dictionary. Skips files that cannot be read (binary files, permission issues, etc.).
+    Excludes simulation output files (fort.*, partcl.data, etc.).
     
     Args:
         lattice_dir (str): Path to directory containing lattice configuration files.
@@ -303,10 +309,17 @@ def load_lattice_file_contents(lattice_dir):
         dict: Dictionary mapping filename (str) to file contents (str) for all readable files.
               Returns empty dict if directory doesn't exist or contains no readable files.
     """
+    # Files to exclude (simulation outputs, not lattice files)
+    exclude_patterns = ['Temp.in', 'partcl.data']
+    
     # Read all files in the lattice directory
     file_contents = {}
     if os.path.isdir(lattice_dir):
         for filename in os.listdir(lattice_dir):
+            # Skip excluded files and fort.* output files
+            if filename in exclude_patterns or filename.startswith('fort.'):
+                continue
+                
             filepath = os.path.join(lattice_dir, filename)
             # Only process regular files, skip directories
             if os.path.isfile(filepath):
@@ -633,11 +646,7 @@ def main():
             output_dir=args.output_dir
         )
         
-    # Write the complete summary table to YAML for easy review and analysis
-    with open(os.path.join(args.output_dir, 'summary_table.yaml'), 'w') as f:
-        yaml.dump(summary_table, f)
-    
-    print(f"Processing complete. Summary written to {os.path.join(args.output_dir, 'summary_table.yaml')}")
+    print(f"Processing complete.")
 
     # Combine files into a single HDF5 file
     if args.Combine_Files.lower() == 'true':
@@ -651,7 +660,7 @@ def main():
         combined_path = os.path.join(args.output_dir, 'Combined_Data.h5')
         combine_files(args.output_dir, combined_path)
         
-        # Delete individual files, keeping only Combined_Data.h5 and summary_table.yaml
+        # Delete individual files, keeping only Combined_Data.h5
         for filename in individual_files:
             file_path = os.path.join(args.output_dir, filename)
             try:

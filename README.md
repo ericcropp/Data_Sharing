@@ -137,48 +137,47 @@ This is a summary.  The authoritative standard lives in SPEC.md.
 The HDF5 file structure follows this hierarchy:
 
 ```
-Combined_Data.h5
-├── (root attributes)
-│   ├── Data_Standard_Version               # Version that all data corresponds to
-│   └── IDs                                 # List of unique identifiers
+<filename>.h5
+├── @Data_Standard_Version                  # Root attribute: Version that all data corresponds to
+├── @IDs                                    # Root attribute: Array of all data point IDs
 │
-├── lattice/
-│   ├── (group attributes)
-│   │   └── lattice_location                # Name, URL, or description
-│   ├── simulation_input_file               # Optional: If simulation input file exists, it goes here
-│   └── lattice_files/   
-│       └── <filename>                      # Datasets storing file contents of required simulation files
+├── lattice/                                # Shared lattice at root level
+│   ├── @lattice_location                   # Group attribute: "included" or "external_reference"
+│   ├── simulation_input_file               # Dataset: simulation input (if present)
+│   └── lattice_files/                      # Subgroup containing lattice files
+│       └── <filename>                      # Datasets storing file contents
 │
-└── <ID>/
+└── <ID>/                                   # One group per data point
+    ├── @Data_Standard_Version              # Group attribute: Version for this data point
+    ├── @ID                                 # Group attribute: Unique identifier (hash)
+    ├── @batch_dims                         # Group attribute: Tuple of batch dimension sizes
+    ├── @run_information_source             # Group attribute: Data source (e.g., "FACET-II")
+    ├── @run_information_date               # Group attribute: Date in YYYY-MM-DD format
+    ├── @run_information_notes              # Group attribute: Optional notes
+    ├── @simulation_code                    # Group attribute: (Simulation only) Code name
+    ├── @simulation_version                 # Group attribute: (Simulation only) Code version
+    ├── @simulation_start                   # Group attribute: (Simulation only) Start position
+    ├── @simulation_end                     # Group attribute: (Simulation only) End position
+    │
     └── observables/
-        │   └── (group attributes)
-        │       ├── Data_Standard_Version   # Version that this file corresponds to
-        │       ├── ID                      # Unique Identifier (Hash)
-        │       ├── batch_dims              # Data batch dimensions
-        │       ├── run_information_date    # The creation date of the data
-        │       ├── run_information_notes   # Custom field for a description of the data
-        │       ├── run_information_source  # Where did this data come from?
-        │       ├── simulation_code         # Simulation only: simulation code that made the data
-        │       ├── simulation_end          # Simulation end location
-        │       ├── simulation_start        # Simulation start location
-        │       └── simulation_version      # Simulation code version
-        │
         ├── <location_name>/                # Location-grouped storage
-        │   └── <observable_name>           # Dataset (shape: batch_dims + feature_dims)
-        │       └── (attributes)
-        │           ├── units               # Unit string (e.g., "m", "pC")
-        │           ├── unit_multiplier     # Prefix multiplier (e.g., 1e-12 for "p")
-        │           ├── control             # Boolean: is this a control variable?
-        │           ├── location            # Location name (redundant with group)
-        │           └── num_feature_dims    # Integer: number of feature dimensions
+        │   └── <observable_name>           # Dataset: batch_dims + feature_dims
+        │       ├── @location               # Dataset attribute: Location name
+        │       ├── @control                # Dataset attribute: Boolean: control variable?
+        │       ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
+        │       ├── @units                  # Dataset attribute: Unit string (e.g., "m", "pC")
+        │       └── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
         │
-        └── multi_location_data/            # Alternative storage beamline stats
-            └── <observable_name>           # Dataset (shape: batch_dims + 1 (location) + feature_dims)
-                └── (attributes)
-                    ├── units               # e.g. "m"
-                    ├── control             # Boolean
-                    ├── unit_multiplier     # Prefix multiplier (e.g., 1e-12 for "p")
-                    └── num_feature_dims    # 0 for scalar
+        └── multi_location_data/            # Multi-location storage
+            ├── DATA_LOCATIONS              # Dataset: location array
+            │   ├── @units                  # Dataset attribute: Location units
+            │   └── @num_feature_dims       # Dataset attribute: Always 0 for locations
+            │
+            └── <observable_name>           # Dataset: batch_dims + (locations,) + feature_dims
+                ├── @control                # Dataset attribute: Boolean
+                ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
+                ├── @units                  # Dataset attribute: Unit string
+                └── @unit_multiplier        # Dataset attribute: Prefix multiplier
 ```
 
 ## Examples

@@ -342,8 +342,6 @@ def main():
     summary_table.append(entry)
 
     print(f"\nProcessing complete. Processed {len(h5_files)} files.")
-    with open(os.path.join(args.output_dir, 'summary_table.yaml'), 'w') as f:
-        yaml.dump(summary_table, f)
 
     # Combine files into a single HDF5 file
     if args.Combine_Files.lower() == 'true':
@@ -357,7 +355,7 @@ def main():
         combined_path = os.path.join(args.output_dir, 'Combined_Data.h5')
         combine_files(args.output_dir, combined_path)
         
-        # Delete individual files, keeping only Combined_Data.h5 and summary_table.yaml
+        # Delete individual files, keeping only Combined_Data.h5
         for filename in individual_files:
             file_path = os.path.join(args.output_dir, filename)
             try:
