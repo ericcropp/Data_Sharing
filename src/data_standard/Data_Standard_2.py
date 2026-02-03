@@ -110,7 +110,7 @@ Dependencies:
 - os: File system operations
 - copy: Deep copying for ParticleGroup handling
 
-Version: 2026-01-26
+Version: 0.1.0
 """
 import numpy as np
 import pandas as pd
@@ -121,7 +121,7 @@ import h5py
 import os
 import copy
 
-VERSION = '2026-01-26'
+VERSION = '0.1.0'
 
 def unit_checker(unit):
     """

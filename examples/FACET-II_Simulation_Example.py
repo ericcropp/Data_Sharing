@@ -51,7 +51,8 @@ Dependencies:
 Output:
     - Individual standardized HDF5 files for each simulation (if Combine_Files=False)
     - summary_table.yaml: Summary of all processed simulations with key parameters
-    - Combined_Data.h5: Single merged file containing all simulations (if Combine_Files=True)
+    - FACET-II_Simulation_Example_v<version>.h5: Single merged file (if Combine_Files=True)
+      where <version> is the Data_Standard_Version (e.g., _v0.1.0)
 """
 
 import numpy as np
@@ -70,6 +71,7 @@ import argparse
 import shutil
 
 SIMULATION_VERSION = "impact-t=3.1.2; lume-impact=0.10.1"
+OUTPUT_FILENAME = "FACET-II_Simulation_Example.h5"
 
 def parse_args():
     """
@@ -547,7 +549,8 @@ def main():
     Output Files:
         - Individual HDF5 files: <output_dir>/<ID>.h5 (if Combine_Files=False)
         - summary_table.yaml: Summary statistics and parameters from all simulations
-        - Combined_Data.h5: Single merged file (if Combine_Files=True)
+        - <example_name>_v<version>.h5: Single merged file (if Combine_Files=True)
+          where <version> is the Data_Standard_Version from the data files
     """
     args = parse_args()
     
@@ -652,24 +655,11 @@ def main():
     if args.Combine_Files.lower() == 'true':
         print("Combining processed files into a single HDF5 file...")
         
-        # Get list of individual HDF5 files before combining
-        individual_files = [f for f in os.listdir(args.output_dir) 
-                          if f.endswith('.h5') and f != 'Combined_Data.h5']
-        
         # Create combined file in output directory
-        combined_path = os.path.join(args.output_dir, 'Combined_Data.h5')
-        combine_files(args.output_dir, combined_path)
+        combined_path = os.path.join(args.output_dir, OUTPUT_FILENAME)
+        actual_combined_path = combine_files(args.output_dir, combined_path)
         
-        # Delete individual files, keeping only Combined_Data.h5
-        for filename in individual_files:
-            file_path = os.path.join(args.output_dir, filename)
-            try:
-                os.remove(file_path)
-            except OSError:
-                pass
-        
-        print(f"Combined file created at {combined_path}")
-        print(f"Removed {len(individual_files)} individual files")
+        print(f"Combined file created at {actual_combined_path}")
     
 if __name__ == '__main__':
     main()

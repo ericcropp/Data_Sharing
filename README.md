@@ -210,25 +210,28 @@ This mapping is stored as a 2xn dataset in the HDF5 file under `/lattice/lattice
 
 ## Examples
 
-Examples are provided in the `examples/` directory:
+Examples are provided in the `examples/` directory. Each example generates output files with the Data Standard version appended to the filename (e.g., `Example_Name_v0.1.0.h5`).
 
 ### FACET-II Simulation Data
 Processes Impact-T simulation archives with particle distributions:
 ```bash
 python examples/FACET-II_Simulation_Example.py 
 ```
+Output: `FACET-II_Simulation_Example_v<version>.h5`
 
 ### FACET-II Experimental Data
 Converts EPICS-based experimental data:
 ```bash
 python examples/FACET-II_Experimental_Example.py 
 ```
+Output: `FACET-II_Experimental_Example_v<version>.h5`
 
 ### AWA Experimental Data
 Processes AWA facility data with waveforms and images:
 ```bash
 python examples/AWA_Experimental_Example.py 
 ```
+Output: `AWA_Experimental_Example_v<version>.h5`
 
 ## API Stability
 

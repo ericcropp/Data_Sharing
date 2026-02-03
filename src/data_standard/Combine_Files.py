@@ -144,13 +144,55 @@ def combine_files(input_dir: str, output_h5: str):
     """
     Combine all HDF5 files in input_dir into a single HDF5 file.
     
+    The output filename will be automatically modified to include the Data_Standard_Version
+    found in the input files. For example, if output_h5 is "Example.h5" and the version
+    is "2026-02-03", the actual output will be "Example_v2026-02-03.h5".
+    
     Args:
         input_dir: Directory containing individual .h5 files to combine
-        output_h5: Path to output combined HDF5 file
+        output_h5: Path to output combined HDF5 file (will be modified to include version)
+    
+    Returns:
+        str: Actual path of the created combined file (with version appended)
     """
     # Find all .h5 files in the directory
     h5_files = [f for f in os.listdir(input_dir) 
-                if f.endswith('.h5') and f != os.path.basename(output_h5)]
+                if f.endswith('.h5') and not f.startswith(os.path.splitext(os.path.basename(output_h5))[0])]
+    
+    if not h5_files:
+        print(f"No HDF5 files found in {input_dir}")
+        return output_h5
+    
+    print(f"Found {len(h5_files)} HDF5 files to combine")
+    
+    # Read Data_Standard_Version from first file to append to output filename
+    first_file_path = os.path.join(input_dir, h5_files[0])
+    data_standard_version = None
+    with h5py.File(first_file_path, "r") as f:
+        # Check root attributes first
+        if 'Data_Standard_Version' in f.attrs:
+            data_standard_version = f.attrs['Data_Standard_Version']
+            if isinstance(data_standard_version, bytes):
+                data_standard_version = data_standard_version.decode('utf-8')
+        else:
+            # Check first group's attributes
+            first_group = list(f.keys())[0] if f.keys() else None
+            if first_group and 'Data_Standard_Version' in f[first_group].attrs:
+                data_standard_version = f[first_group].attrs['Data_Standard_Version']
+                if isinstance(data_standard_version, bytes):
+                    data_standard_version = data_standard_version.decode('utf-8')
+    
+    # Modify output filename to include version
+    if data_standard_version:
+        # Split path and filename
+        output_dir = os.path.dirname(output_h5)
+        output_basename = os.path.basename(output_h5)
+        name_without_ext, ext = os.path.splitext(output_basename)
+        
+        # Create new filename with version
+        versioned_basename = f"{name_without_ext}_v{data_standard_version}{ext}"
+        output_h5 = os.path.join(output_dir, versioned_basename) if output_dir else versioned_basename
+        print(f"Output file will include version: {versioned_basename}")
     
     if not h5_files:
         print(f"No HDF5 files found in {input_dir}")
@@ -227,6 +269,18 @@ def combine_files(input_dir: str, output_h5: str):
             i += 1
         
         print(f"Successfully combined {len(ids)} files into {output_h5}")
+    
+    # Delete individual input files after successful combination
+    for h5_file in h5_files:
+        file_path = os.path.join(input_dir, h5_file)
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            print(f"Warning: Could not delete {h5_file}: {e}")
+    
+    print(f"Removed {len(h5_files)} individual files")
+    
+    return output_h5
 
         # Store the summary as a single attribute table on the summary_yaml group
         # Write summary information as attributes

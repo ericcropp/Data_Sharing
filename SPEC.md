@@ -45,7 +45,7 @@ This document defines a standardized format for storing accelerator physics data
 
 **Defining Implementation:**
 - `src/data_standard/Data_Standard_2.py`: Classes that generate intermediate files 
-- `src/data_standard/Combine_Files.py`: Utility for finalizing a single HDF5 file that is compliant with the data standard defined below
+- `src/data_standard/Combine_Files.py`: Utility for finalizing a single HDF5 file that is compliant with the data standard defined below. Automatically appends the Data Standard version to the output filename (e.g., `filename_v0.1.0.h5`).
 - Three examples are in `examples/`.  See `README.md` for how to run those examples.
 
 ---
@@ -158,8 +158,7 @@ The HDF5 file structure for combined files follows this hierarchy:
 
 #### @Data_Standard_Version
 - **Type:** String
-- **Format:** YYYY-MM-DD date format
-- **Requirement:** Must match pattern `^\d{4}-\d{2}-\d{2}$`
+- **Format:** X.Y.Z
 - **Purpose:** Identifies which version of this standard was used to create the file
 - **Rule:** All batches in a combined file must use the same version
 
@@ -205,13 +204,6 @@ The HDF5 file structure for combined files follows this hierarchy:
 - **Example:** Column 0: `['SOLN:IN10:121', 'SOL10121']` maps PV to lattice element
 - **Access Pattern:** `pv_name = lattice_mapping[0, i]`, `lattice_name = lattice_mapping[1, i]`
 
-**Note on Simulation Input Files:**
-- In **individual batch files** (before combining), the lattice group may contain:
-  - `simulation_input_file` (dataset): Single input file for scalar batches (batch_dims = ())
-  - `simulation_input_file_0`, `simulation_input_file_1`, etc. (datasets): Multiple input files for non-scalar batches
-- In **combined files**, these datasets are excluded since each simulation has its own input file
-- Access simulation metadata via batch group attributes: `@simulation_code`, `@simulation_version`, `@simulation_start`, `@simulation_end`
-
 ### Batch Groups
 
 **Location:** `/<ID>/`
@@ -221,7 +213,7 @@ The HDF5 file structure for combined files follows this hierarchy:
 
 #### @Data_Standard_Version
 - **Type:** String
-- **Format:** YYYY-MM-DD
+- **Format:** X.Y.Z
 - **Requirement:** Must match root @Data_Standard_Version in combined files
 
 #### @ID
