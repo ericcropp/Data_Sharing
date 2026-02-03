@@ -107,7 +107,7 @@ The HDF5 file structure for combined files follows this hierarchy:
 │
 ├── lattice/                                # Shared lattice at root level
 │   ├── @lattice_location                   # Group attribute: "included" or "external_reference"
-│   ├── simulation_input_file               # Dataset: simulation input (if present)
+│   ├── lattice_mapping                     # Dataset: 2xn table mapping PVs to lattice elements (optional)
 │   └── lattice_files/                      # Subgroup containing lattice files
 │       └── <filename>                      # Datasets storing file contents
 │
@@ -191,6 +191,26 @@ The HDF5 file structure for combined files follows this hierarchy:
 - **Content:** One dataset per file, with filename as dataset name
 - **File Content Type:** String or bytes
 - **Rule:** All batches in a combined file must have identical lattice files
+
+**Optional Datasets:**
+
+#### lattice_mapping
+- **Type:** 2D array of byte strings, shape (2, n)
+- **Purpose:** Maps control system names (often EPICS PVs) to lattice element names for experimental data
+- **Requirement:** Optional; typically used with experimental data from accelerator facilities
+- **Format:** 2xn array where:
+  - Row 0: EPICS PV names (e.g., `[b'SOLN:IN10:121', b'QUAD:IN10:121', ...]`)
+  - Row 1: Corresponding lattice element names (e.g., `[b'SOL10121', b'CQ10121', ...]`)
+- **Usage:** Enables correlation between control system variables and beamline model elements
+- **Example:** Column 0: `['SOLN:IN10:121', 'SOL10121']` maps PV to lattice element
+- **Access Pattern:** `pv_name = lattice_mapping[0, i]`, `lattice_name = lattice_mapping[1, i]`
+
+**Note on Simulation Input Files:**
+- In **individual batch files** (before combining), the lattice group may contain:
+  - `simulation_input_file` (dataset): Single input file for scalar batches (batch_dims = ())
+  - `simulation_input_file_0`, `simulation_input_file_1`, etc. (datasets): Multiple input files for non-scalar batches
+- In **combined files**, these datasets are excluded since each simulation has its own input file
+- Access simulation metadata via batch group attributes: `@simulation_code`, `@simulation_version`, `@simulation_start`, `@simulation_end`
 
 ### Batch Groups
 

@@ -448,7 +448,9 @@ class Lattice:
     lattice_files : dict or list
         Dictionary of {filename: contents} or list of file paths.
     PV_table : dict
-        Dictionary of process variable names and their values.
+        Optional dictionary mapping EPICS Process Variable (PV) names to lattice element names.
+        Used in experimental data to correlate control system variables with beamline elements.
+        Example: {'SOLN:IN10:121': 'SOL10121', 'QUAD:IN10:121': 'CQ10121'}
 
     Methods
     -------
@@ -503,10 +505,14 @@ class Lattice:
     def add_lattice(self, lattice_location, lattice_files=None, PV_table=None):
         """
         Adds lattice location and files.
+        
         Args:
             lattice_location (str): Location of the lattice.
             lattice_files (list or dict): Lattice files or their contents.
-            PV_table (dict): Optional dictionary of PVs and their values.
+            PV_table (dict): Optional dictionary mapping EPICS Process Variable (PV) names
+                to their corresponding lattice element names. Used in experimental data to 
+                correlate control system variables with beamline elements.
+                Example: {'SOLN:IN10:121': 'SOL10121', 'QUAD:IN10:121': 'CQ10121'}
         """
         self.lattice_location = lattice_location
         self.lattice_files = lattice_files if lattice_files is not None else []
@@ -863,10 +869,14 @@ class DataPoint2:
     def add_lattice(self, lattice_location=None, lattice_files=None, PV_table=None):
         """
         Adds lattice information to the data point.
+        
         Args:
             lattice_location: Location of the lattice.
             lattice_files: Lattice files or their contents.
-            PV_table (dict): Optional dictionary of PVs and their values.
+            PV_table (dict): Optional dictionary mapping EPICS Process Variable (PV) names
+                to their corresponding lattice element names. Used in experimental data to 
+                correlate control system variables with beamline elements.
+                Example: {'SOLN:IN10:121': 'SOL10121', 'QUAD:IN10:121': 'CQ10121'}
         """
         self.lattice.add_lattice(lattice_location, lattice_files, PV_table)
         return self
@@ -983,8 +993,9 @@ class DataPoint2:
             lattice_location (dataset)
             lattice_files/ (group, if lattice_location='included')
                 <filename> (dataset): File contents
-            PV_table (attributes): Process variable values
-            simulation_input_file (dataset, if SimulatedDataPoint2)
+            lattice_mapping (dataset, optional): 2xn array where row 0 is PV names, row 1 is lattice elements
+            simulation_input_file (dataset, if SimulatedDataPoint2 with scalar batch)
+            simulation_input_file_0, _1, ... (datasets, if SimulatedDataPoint2 with non-scalar batch)
         
         /observables/
             <location_name>/ (group, if location_primary=True)
@@ -1036,10 +1047,15 @@ class DataPoint2:
                 for fname, contents in self.lattice.lattice_files.items():
                     lattice_files_grp.create_dataset(fname, data=np.bytes_(contents))
             
-            # Save PV_table as attributes if present
-            if hasattr(self.lattice, "PV_table") and isinstance(self.lattice.PV_table, dict):
-                for k, v in self.lattice.PV_table.items():
-                    lattice_grp.attrs[k] = v
+            # Save PV_table as 2xn dataset if present
+            if hasattr(self.lattice, "PV_table") and isinstance(self.lattice.PV_table, dict) and self.lattice.PV_table:
+                # Create 2xn array: first row is PV names, second row is lattice element names
+                pv_names = list(self.lattice.PV_table.keys())
+                lattice_names = list(self.lattice.PV_table.values())
+                
+                # Create 2xn array and store as dataset
+                mapping_array = np.array([pv_names, lattice_names], dtype='S')
+                lattice_grp.create_dataset("lattice_mapping", data=mapping_array)
 
             # ==========================================
             # Save observables
@@ -1175,7 +1191,16 @@ class DataPoint2:
 
             # Save simulation input file if this is a SimulatedDataPoint2
             if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
-                lattice_grp.create_dataset("simulation_input_file", data=np.bytes_(self.simulation_metadata.simulation_input_file))
+                # Check if we have multiple simulations in this batch
+                if len(self.observables) > 0 and self.observables[0].batch_dims:
+                    # Multiple simulations: create simulation_input_file_0, _1, _2, etc.
+                    batch_size = np.prod(self.observables[0].batch_dims)
+                    for i in range(batch_size):
+                        dataset_name = f"simulation_input_file_{i}"
+                        lattice_grp.create_dataset(dataset_name, data=np.bytes_(self.simulation_metadata.simulation_input_file))
+                else:
+                    # Single simulation: use simple name
+                    lattice_grp.create_dataset("simulation_input_file", data=np.bytes_(self.simulation_metadata.simulation_input_file))
 
             # ==========================================
             # Save metadata as root attributes

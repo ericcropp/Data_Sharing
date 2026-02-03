@@ -151,8 +151,10 @@ def test_lattice_data_present(temp_output_dir, check_data_available):
             lattice_location = lattice_location.decode('utf-8')
         assert len(lattice_location) > 0, "lattice_location is empty"
         
-        # Check for lattice files or simulation input file
-        assert 'lattice_files' in lattice_grp or 'simulation_input_file' in lattice_grp, \
+        # Check for lattice files or simulation input file(s)
+        has_lattice_files = 'lattice_files' in lattice_grp
+        has_sim_input = any(k.startswith('simulation_input_file') for k in lattice_grp.keys())
+        assert has_lattice_files or has_sim_input, \
             "Missing lattice files or simulation input file"
 
 

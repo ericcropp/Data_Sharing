@@ -67,7 +67,8 @@ def compare_lattice_groups(lattice1: h5py.Group, lattice2: h5py.Group, exclude_k
         bool: True if lattices are identical, False otherwise
     """
     if exclude_keys is None:
-        exclude_keys = {'simulation_input_file'}  # Exclude simulation_input_file as it varies per simulation
+        # Exclude simulation_input_file* as it varies per simulation
+        exclude_keys = set()
     
     # Compare attributes
     if set(lattice1.attrs.keys()) != set(lattice2.attrs.keys()):
@@ -90,8 +91,9 @@ def compare_lattice_groups(lattice1: h5py.Group, lattice2: h5py.Group, exclude_k
             return False
     
     # Compare members (datasets and subgroups), excluding specified keys
-    keys1 = set(lattice1.keys()) - exclude_keys
-    keys2 = set(lattice2.keys()) - exclude_keys
+    # Also exclude all simulation_input_file* datasets (varies per simulation)
+    keys1 = set(k for k in lattice1.keys() if not k.startswith('simulation_input_file')) - exclude_keys
+    keys2 = set(k for k in lattice2.keys() if not k.startswith('simulation_input_file')) - exclude_keys
     
     if keys1 != keys2:
         print(f"Keys differ at {path}: {keys1} vs {keys2}")
@@ -207,6 +209,12 @@ def combine_files(input_dir: str, output_h5: str):
             if i == 0:
                 first_group_name = grp_name
                 out_f.move(grp_name + '/lattice', '/lattice')
+                
+                # Remove simulation_input_file* datasets from lattice (they vary per simulation)
+                lattice_grp = out_f['lattice']
+                sim_input_keys = [k for k in lattice_grp.keys() if k.startswith('simulation_input_file')]
+                for key in sim_input_keys:
+                    del lattice_grp[key]
                 
                 # Store Data_Standard_Version at root level (now that we've verified all match)
                 if data_standard_version is not None:

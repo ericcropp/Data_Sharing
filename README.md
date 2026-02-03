@@ -143,7 +143,7 @@ The HDF5 file structure follows this hierarchy:
 │
 ├── lattice/                                # Shared lattice at root level
 │   ├── @lattice_location                   # Group attribute: "included" or "external_reference"
-│   ├── simulation_input_file               # Dataset: simulation input (if present)
+│   ├── lattice_mapping                     # Dataset: 2xn PV-to-lattice mapping (optional)
 │   └── lattice_files/                      # Subgroup containing lattice files
 │       └── <filename>                      # Datasets storing file contents
 │
@@ -183,6 +183,30 @@ The HDF5 file structure follows this hierarchy:
                 ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
                 └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
 ```
+
+### PV to Lattice Mapping (Experimental Data)
+
+For experimental data from accelerator facilities using EPICS or similar control systems, the standard supports optional PV (Process Variable) to lattice element name mapping. This allows correlation between control system variables and beamline model elements:
+
+```python
+# Example: FACET-II experimental data
+loc_dict = {
+    'SOLN:IN10:121': 'SOL10121',    # Solenoid
+    'QUAD:IN10:121': 'CQ10121',      # Quadrupole  
+    'PROF:IN10:571': 'PR10571'       # Profile screen
+}
+
+D.add_lattice(
+    lattice_location='https://github.com/slaclab/facet2-lattice',
+    PV_table=loc_dict
+)
+```
+
+This mapping is stored as a 2xn dataset in the HDF5 file under `/lattice/lattice_mapping`:
+- **Shape:** (2, n) where n is the number of PV-lattice pairs
+- **Row 0:** EPICS PV names
+- **Row 1:** Corresponding lattice element names
+- **Access:** `lattice_mapping[0, i]` gives PV name, `lattice_mapping[1, i]` gives lattice name
 
 ## Examples
 
