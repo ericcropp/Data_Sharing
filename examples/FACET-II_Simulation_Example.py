@@ -468,8 +468,7 @@ def add_datapoints(batch_dims,
             "name": col.split(':')[1] if ':' in col else col,  # Use subkey as name if available
             "value": master_dict[col],
             "location": col.split(':')[0],  # Use element name as location
-            "units": units,
-            "description": ""   # Fill in description if available
+            "units": units
         }
         
         # Get the data array for this parameter (one value per simulation)
@@ -480,7 +479,7 @@ def add_datapoints(batch_dims,
             scalar_data = scalar_data[0]
         
         # Add as observable with control=True to indicate it's an input parameter
-        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, attrs={'Description': scalar_inputs[col]['description']}, data_name=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True, control=True)
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, data_name=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True, control=True)
     
     # Save the complete data point to HDF5 file
     os.makedirs(output_dir, exist_ok=True)
@@ -604,23 +603,22 @@ def main():
         data_dicts = []
         for i in range(num_individual, num_files):
             print(f"Processing file {i+1}/{num_files}: {impact_filenames['impact_archive'][i]}")
-        I = impact.Impact()
-        I.load_archive(impact_filenames['impact_archive'][i])
-        I_orig = impact.Impact.from_yaml(os.path.join(args.lattice_dir, 'ImpactT.yaml'))
+            I = impact.Impact()
+            I.load_archive(impact_filenames['impact_archive'][i])
+            I_orig = impact.Impact.from_yaml(os.path.join(args.lattice_dir, 'ImpactT.yaml'))
 
-        lattice_I_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I.input['lattice'])}
-        lattice_I_orig_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I_orig.input['lattice'])}
+            lattice_I_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I.input['lattice'])}
+            lattice_I_orig_dict = {elem.get('name', f'idx_{i}'): elem for i, elem in enumerate(I_orig.input['lattice'])}
 
-        diff_dict, data_dict = lattice_comparison(lattice_I_dict, lattice_I_orig_dict, I, I_orig)
+            diff_dict, data_dict = lattice_comparison(lattice_I_dict, lattice_I_orig_dict, I, I_orig)
+            
+            I_list.append(I)
+            data_dicts.append(data_dict)
         
-        run_info = extract_run_info(I)
-
-        input_contents = extract_input_file_contents(I, args.lattice_dir)
-
+        # Get run_info and file contents from first file in batch (These are the same for all files)
+        run_info = extract_run_info(I_list[0])
+        input_contents = extract_input_file_contents(I_list[0], args.lattice_dir)
         rfdata_contents = load_lattice_file_contents(args.lattice_dir)
-
-        I_list.append(I)
-        data_dicts.append(data_dict)
 
         D, summary_table = add_datapoints(
             batch_dims=(num_files - num_individual,),  # Batch size is remaining files

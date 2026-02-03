@@ -86,17 +86,26 @@ def combine_files(input_dir: str, output_h5: str):
         top_groups = [name for name in out_f.keys() if isinstance(out_f[name], h5py.Group)]
         i = 0
         first_group_name = None
+        data_standard_version = None
+        
         for grp_name in top_groups:
+            # Check Data_Standard_Version consistency
+            grp = out_f[grp_name]
+            if 'Data_Standard_Version' in grp.attrs:
+                version = grp.attrs['Data_Standard_Version']
+                if data_standard_version is None:
+                    data_standard_version = version
+                else:
+                    assert version == data_standard_version, \
+                        f"Data_Standard_Version mismatch: {grp_name} has '{version}' but expected '{data_standard_version}'"
+            
             if i == 0:
                 first_group_name = grp_name
                 out_f.move(grp_name + '/lattice', '/lattice')
                 
-                # Copy run_information and other common metadata from first file to root
-                first_group = out_f[grp_name]
-                for attr_name in ['run_information_source', 'run_information_date', 
-                                'run_information_notes', 'Data_Standard_Version']:
-                    if attr_name in first_group.attrs:
-                        out_f.attrs[attr_name] = first_group.attrs[attr_name]
+                # Store Data_Standard_Version at root level (now that we've verified all match)
+                if data_standard_version is not None:
+                    out_f.attrs['Data_Standard_Version'] = data_standard_version
                         
                 # Store list of IDs as root attribute
                 out_f.attrs['IDs'] = [entry.get('ID') for entry in summary]

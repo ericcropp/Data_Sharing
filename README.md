@@ -135,22 +135,48 @@ D.saveHDF5('./output/')
 The HDF5 file structure follows this hierarchy:
 
 ```
-<ID>.h5
-├── (attributes)
-│   ├── ID                          # Unique identifier
-│   ├── run_information_source      # Data source
-│   ├── run_information_date        # Timestamp
-│   ├── Data_Standard_Version       # Format version
-│   └── <summary>                   # Summary statistics
+Combined_Data.h5
+├── (root attributes)
+│   ├── Data_Standard_Version               # Version that all data corresponds to
+│   └── IDs                                 # List of unique identifiers
+│
 ├── lattice/
-│   ├── lattice_location           # Lattice name/URL
-│   └── lattice_files/             # Lattice configuration files
-└── observables/
-    ├── <location>/               # Location-grouped data
-    │   ├── <observable_name>      # Dataset
-    │   └── (attributes)           # units, control, location
-    └── Type_Grouped_Data/         # Data grouped by type
-        └── <observable_name>      # Dataset with location attribute
+│   ├── (group attributes)
+│   │   └── lattice_location                # Name, URL, or description
+│   ├── simulation_input_file               # Optional: If simulation input file exists, it goes here
+│   └── lattice_files/   
+│       └── <filename>                      # Datasets storing file contents of required simulation files
+│
+└── <ID>/
+    └── observables/
+        │   └── (group attributes)
+        │       ├── Data_Standard_Version   # Version that this file corresponds to
+        │       ├── ID                      # Unique Identifier (Hash)
+        │       ├── batch_dims              # Data batch dimensions
+        │       ├── run_information_date    # The creation date of the data
+        │       ├── run_information_notes   # Custom field for a description of the data
+        │       ├── run_information_source  # Where did this data come from?
+        │       ├── simulation_code         # Simulation only: simulation code that made the data
+        │       ├── simulation_end          # Simulation end location
+        │       ├── simulation_start        # Simulation start location
+        │       └── simulation_version      # Simulation code version
+        │
+        ├── <location_name>/                # Location-grouped storage
+        │   └── <observable_name>           # Dataset (shape: batch_dims + feature_dims)
+        │       └── (attributes)
+        │           ├── units               # Unit string (e.g., "m", "pC")
+        │           ├── unit_multiplier     # Prefix multiplier (e.g., 1e-12 for "p")
+        │           ├── control             # Boolean: is this a control variable?
+        │           ├── location            # Location name (redundant with group)
+        │           └── num_feature_dims    # Integer: number of feature dimensions
+        │
+        └── multi_location_data/            # Alternative storage beamline stats
+            └── <observable_name>           # Dataset (shape: batch_dims + 1 (location) + feature_dims)
+                └── (attributes)
+                    ├── units               # e.g. "m"
+                    ├── control             # Boolean
+                    ├── unit_multiplier     # Prefix multiplier (e.g., 1e-12 for "p")
+                    └── num_feature_dims    # 0 for scalar
 ```
 
 ## Examples

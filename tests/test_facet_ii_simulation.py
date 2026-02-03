@@ -146,11 +146,11 @@ def test_lattice_data_present(temp_output_dir, check_data_available):
     with h5py.File(test_file, 'r') as f:
         lattice_grp = f['lattice']
         
-        # Check lattice_location exists
-        assert 'lattice_location' in lattice_grp, "Missing lattice_location dataset"
+        # Check lattice_location exists as an attribute
+        assert 'lattice_location' in lattice_grp.attrs, "Missing lattice_location attribute"
         
         # Check that lattice_location is not empty
-        lattice_location = lattice_grp['lattice_location'][()]
+        lattice_location = lattice_grp.attrs['lattice_location']
         if isinstance(lattice_location, bytes):
             lattice_location = lattice_location.decode('utf-8')
         assert len(lattice_location) > 0, "lattice_location is empty"

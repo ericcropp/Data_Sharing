@@ -1028,7 +1028,7 @@ class DataPoint2:
             # Save lattice configuration
             # ==========================================
             lattice_grp = f.create_group("lattice")
-            lattice_grp.create_dataset("lattice_location", data=self.lattice.lattice_location)
+            lattice_grp.attrs["lattice_location"] = self.lattice.lattice_location
             
             # Save lattice files if provided as dictionary
             if isinstance(self.lattice.lattice_files, dict):
@@ -1119,9 +1119,6 @@ class DataPoint2:
                     out_grp.attrs["units"] = observable.units_str
                     out_grp.attrs["unit_multiplier"] = observable.unit_multiplier
 
-                    for k, v in observable.attrs.items():
-                        out_grp.attrs[k] = v
-
                 # --- Handle location_primary=True: Group by location ---
                 else:
                     # Validate location structure
@@ -1165,9 +1162,6 @@ class DataPoint2:
                     # Assert that location in metadata matches group name
                     assert dataset.attrs["location"] == location_str, \
                         f"Location mismatch: group name is '{location_str}' but metadata has '{dataset.attrs['location']}'"
-                    
-                    for k, v in observable.attrs.items():
-                        dataset.attrs[k] = v
 
             # Save simulation input file if this is a SimulatedDataPoint2
             if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
