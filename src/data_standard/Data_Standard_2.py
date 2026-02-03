@@ -66,32 +66,31 @@ Usage Example:
     
     # Add a scalar observable (e.g., beam charge)
     D.add_observable(
-        batch_dims=0,
-        feature_dims=0,  # scalar
+        batch_dims=(),  # Empty tuple for single data point
+        num_feature_dims=0,  # scalar
         location=['ICT1'],
-        data=np.array([250.0]),  # pC
-        data_names=['charge'],
+        data=np.array(250.0),  # 0-D array for scalar
+        data_name='charge',
         units='pC',
         control=False
     )
     
     # Add a 2D image (e.g., screen image)
     D.add_observable(
-        batch_dims=0,
-        feature_dims=2,  # 2D image
+        batch_dims=(),
+        num_feature_dims=2,  # 2D image
         location=['Screen1'],
         data=image_array,
-        data_names=['image'],
+        data_name='image',
         units='counts',
-        attrs={'pxcal': 1e-6}  # pixel calibration
+        attrs={'bin_size': 1e-6, 'offset': 0.0}  # REQUIRED for num_feature_dims > 0
     )
     
     # Add lattice and metadata
-    D.add_lattice(lattice_location='FACET-II')
+    D.add_lattice(lattice_location='https://github.com/slaclab/facet2-lattice')
     D.add_run_information(source='FACET-II', date='2025-01-26', notes='Example run')
     
     # Finalize and save
-    D.finalize()
     D.saveHDF5('./output/')
 
 Exceptions:
@@ -889,11 +888,12 @@ class DataPoint2:
         """
         Adds an observable to the data point.
         Args:
-            batch_dims (list): List of batch dimension sizes.
-            num_feature_dims (int): Number of feature dimensions.
+            batch_dims (tuple): Tuple of batch dimension sizes. Use () for single data point.
+            num_feature_dims (int): Number of feature dimensions (0=scalar, 1=1D, 2=2D, etc).
             location: Location(s) associated with the observable.
             data: Observable data array.
-            attrs (dict): Additional attributes.
+            attrs (dict): Additional attributes. REQUIRED to include 'bin_size' and 'offset'
+                         when num_feature_dims > 0. Example: {'bin_size': 1e-6, 'offset': 0.0}
             data_name (str): Name of the data field.
             units: Physical units.
             location_units (str): Physical units for location data. Default None.
@@ -1118,6 +1118,11 @@ class DataPoint2:
                     out_grp.attrs["num_feature_dims"] = observable.num_feature_dims
                     out_grp.attrs["units"] = observable.units_str
                     out_grp.attrs["unit_multiplier"] = observable.unit_multiplier
+                    
+                    # Save bin_size and offset when num_feature_dims > 0
+                    if observable.num_feature_dims > 0:
+                        out_grp.attrs["bin_size"] = observable.attrs['bin_size']
+                        out_grp.attrs["offset"] = observable.attrs['offset']
 
                 # --- Handle location_primary=True: Group by location ---
                 else:
@@ -1158,6 +1163,11 @@ class DataPoint2:
                     dataset.attrs["num_feature_dims"] = observable.num_feature_dims
                     dataset.attrs["units"] = observable.units_str
                     dataset.attrs["unit_multiplier"] = observable.unit_multiplier
+                    
+                    # Save bin_size and offset when num_feature_dims > 0
+                    if observable.num_feature_dims > 0:
+                        dataset.attrs["bin_size"] = observable.attrs['bin_size']
+                        dataset.attrs["offset"] = observable.attrs['offset']
                     
                     # Assert that location in metadata matches group name
                     assert dataset.attrs["location"] == location_str, \

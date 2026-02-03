@@ -130,7 +130,9 @@ The HDF5 file structure for combined files follows this hierarchy:
         │       ├── @control                # Dataset attribute: Boolean: control variable?
         │       ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
         │       ├── @units                  # Dataset attribute: Unit string (e.g., "m", "pC")
-        │       └── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
+        │       ├── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
+        │       ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
+        │       └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
         │
         └── multi_location_data/            # Multi-location storage
             ├── DATA_LOCATIONS              # Dataset: location array
@@ -141,7 +143,9 @@ The HDF5 file structure for combined files follows this hierarchy:
                 ├── @control                # Dataset attribute: Boolean
                 ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
                 ├── @units                  # Dataset attribute: Unit string
-                └── @unit_multiplier        # Dataset attribute: Prefix multiplier
+                ├── @unit_multiplier        # Dataset attribute: Prefix multiplier
+                ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
+                └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
 ```
 
 ---
@@ -309,20 +313,24 @@ Two storage patterns are supported:
 
 **Additional Attributes (when num_feature_dims > 0):**
 
+When `num_feature_dims > 0`, the following attributes are **required** and must be provided in the `attrs` dictionary parameter when calling `add_observable()`:
+
 ##### @bin_size
 - **Type:** Float
-- **Requirement:** Required when num_feature_dims > 0
+- **Requirement:** Required when num_feature_dims > 0; must be specified in attrs dict
 - **Purpose:** Physical size of one bin/pixel in feature space
 - **Units:** Match observable units
 - **Note:** Can be positive or negative (negative for reversed coordinate axes)
+- **Usage:** `attrs={'bin_size': 1e-6, 'offset': 0.0}`
 
 ##### @offset
 - **Type:** Float
-- **Requirement:** Required when num_feature_dims > 0
+- **Requirement:** Required when num_feature_dims > 0; must be specified in attrs dict
 - **Purpose:** Physical coordinate of first bin/pixel
 - **Units:** Match observable units
 - **Can be:** Any float
 - **Coordinate calculation:** `coord[i] = offset + i * bin_size`
+- **Usage:** `attrs={'bin_size': 1e-6, 'offset': 0.0}`
 
 #### Pattern 2: Multi-Location Storage
 
@@ -457,7 +465,8 @@ The following rules are enforced when creating and combining HDF5 files:
 **Observable Rules:**
 - control attribute must be boolean type
 - num_feature_dims must be >= 0
-- When num_feature_dims > 0, bin_size and offset must be specified
+- When num_feature_dims > 0, bin_size and offset must be specified in attrs dict
+- bin_size and offset must be convertible to float
 - unit_multiplier must be positive (> 0)
 
 **Multi-Location Rules:**

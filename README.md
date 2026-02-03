@@ -166,7 +166,9 @@ The HDF5 file structure follows this hierarchy:
         │       ├── @control                # Dataset attribute: Boolean: control variable?
         │       ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
         │       ├── @units                  # Dataset attribute: Unit string (e.g., "m", "pC")
-        │       └── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
+        │       ├── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
+        │       ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
+        │       └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
         │
         └── multi_location_data/            # Multi-location storage
             ├── DATA_LOCATIONS              # Dataset: location array
@@ -177,7 +179,9 @@ The HDF5 file structure follows this hierarchy:
                 ├── @control                # Dataset attribute: Boolean
                 ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
                 ├── @units                  # Dataset attribute: Unit string
-                └── @unit_multiplier        # Dataset attribute: Prefix multiplier
+                ├── @unit_multiplier        # Dataset attribute: Prefix multiplier
+                ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
+                └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
 ```
 
 ## Examples
