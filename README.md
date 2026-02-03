@@ -233,6 +233,16 @@ python examples/AWA_Experimental_Example.py
 ```
 Output: `AWA_Experimental_Example_v<version>.h5`
 
+**Note:** Running the examples will generate output files in `examples/data/output/`. Reference outputs for validation are available as release assets (see below).
+
+## Reference Outputs
+
+Pre-generated reference output files for the three examples above are available as versioned release assets. 
+
+**Download:** https://github.com/ericcropp/Data_Sharing/releases
+
+These files are stored as release assets rather than in the repository due to their size.
+
 ## API Stability
 
 The public API exposed via `data_standard` is intended to remain stable within
