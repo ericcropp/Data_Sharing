@@ -127,27 +127,42 @@ The HDF5 file structure for combined files follows this hierarchy:
     │
     └── observables/
         ├── <location_name>/                # Location-grouped storage
-        │   └── <observable_name>           # Dataset: batch_dims + feature_dims
-        │       ├── @location               # Dataset attribute: Location name
-        │       ├── @control                # Dataset attribute: Boolean: control variable?
-        │       ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
-        │       ├── @units                  # Dataset attribute: Unit string (e.g., "m", "pC")
-        │       ├── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
-        │       ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
-        │       └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
+        │   ├── <observable_name>           # Dataset: batch_dims + feature_dims (numeric)
+        │   │   ├── @location               # Dataset attribute: Location name
+        │   │   ├── @control                # Dataset attribute: Boolean: control variable?
+        │   │   ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
+        │   │   ├── @units                  # Dataset attribute: Unit string (e.g., "m", "pC")
+        │   │   ├── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
+        │   │   ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
+        │   │   └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
+        │   └── ParticleGroup/              # Group: ParticleGroup observable (fixed name)
+        │       ├── @control                # Group attribute: Boolean: control variable?
+        │       ├── @location               # Group attribute: Location name
+        │       ├── @num_feature_dims       # Group attribute: n_particles per distribution
+        │       └── <species>/              # e.g. "electron" – written by ensemble format
+        │           ├── @numDistributions   # Scalar: prod(batch_dims)
+        │           ├── @ensembleShape      # Array: batch_dims (authoritative N-D shape)
+        │           └── position/x  (*batch_dims, n_particles)
         │
         └── multi_location_data/            # Multi-location storage
             ├── DATA_LOCATIONS              # Dataset: location array
             │   ├── @units                  # Dataset attribute: Location units
             │   └── @num_feature_dims       # Dataset attribute: Always 0 for locations
             │
-            └── <observable_name>           # Dataset: batch_dims + (locations,) + feature_dims
-                ├── @control                # Dataset attribute: Boolean
-                ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
-                ├── @units                  # Dataset attribute: Unit string
-                ├── @unit_multiplier        # Dataset attribute: Prefix multiplier
-                ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
-                └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
+            ├── <observable_name>           # Dataset: batch_dims + (locations,) + feature_dims (numeric)
+            │   ├── @control                # Dataset attribute: Boolean
+            │   ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
+            │   ├── @units                  # Dataset attribute: Unit string
+            │   ├── @unit_multiplier        # Dataset attribute: Prefix multiplier
+            │   ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
+            │   └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
+            └── ParticleGroup/              # Group: ParticleGroup observable (fixed name)
+                ├── @control                # Group attribute: Boolean: control variable?
+                ├── @num_feature_dims       # Group attribute: n_particles per distribution
+                └── <species>/              # e.g. "electron"
+                    ├── @numDistributions   # Scalar: prod(batch_dims)
+                    ├── @ensembleShape      # Array: batch_dims (authoritative N-D shape)
+                    └── position/x  (*batch_dims, n_particles)
 ```
 
 ---
@@ -394,13 +409,16 @@ batch_dims = (3, 4)  → ensemble with ensembleShape=[3,4], dataset shape (3, 4,
 
 **HDF5 structure (ensemble):**
 ```
-<parent_group>/
-  <observable_name>/
-    <species>/                            (e.g. "electron")
+<parent_group>/                           (e.g. observables/<location>)
+  ParticleGroup/                          ← fixed group name; one per location
+    @control          = False             ← observable metadata (mirrors numeric observables)
+    @location         = "injector"        ← location name (location-primary storage only)
+    @num_feature_dims = n_particles       ← number of particles per distribution
+    <species>/                            (e.g. "electron") – written by ensemble format
       @speciesType    = "electron"
       @numParticles   = n_particles
-      @numDistributions = prod(batch_dims)
-      @ensembleShape  = batch_dims        ← N-D shape; matches batch_dims of observable
+      @numDistributions = prod(batch_dims)  ← scalar convenience count
+      @ensembleShape  = batch_dims          ← authoritative N-D batch shape
       @totalCharge    = ...
       @chargeUnitSI   = 1.0
       position/
@@ -445,13 +463,6 @@ The particle dimension plays the role of the feature dimension for ParticleGroup
 Consequently, `num_feature_dims` is always 0 for ParticleGroup observables — the
 particle array is handled internally by the ensemble format.
 
-**Requirements:**
-- Container must be numpy object array with `dtype=object`
-- All elements must be ParticleGroup instances
-- All distributions must share the same species and number of particles
-- No dataset attributes (units, control, etc.) stored — ParticleGroups carry
-  their own internal openPMD metadata
-
 ### Data Type Requirements
 
 #### Regular Numeric Data
@@ -460,11 +471,23 @@ particle array is handled internally by the ensemble format.
 - **Shape validation:** Must match `batch_dims + (num_locations,) + feature_dims`
 
 #### ParticleGroup Data
-- **Container:** Numpy object array
-- **dtype:** Must be `object`
-- **Content validation:** Every element must be ParticleGroup instance
-- **Shape validation:** Must match batch_dims exactly (no location or feature dims)
-- **Batch dimensions:** Supports arbitrary N-D batch_dims via `ensembleShape` attribute
+- **Container (Python API):** Pass a numpy object array (`dtype=object`) to
+  `add_observable()`. This is a Python-level API convention; the HDF5 file does
+  not store any "object array" marker.
+- **Content validation:** All elements must be `ParticleGroup` instances with
+  identical species and `n_particle`.
+- **Shape/batch validation:** Array shape must equal `batch_dims` exactly.
+  `SingleObservable.data_dim_checker()` (called from `add_observable()`) raises
+  `ValueError` if the shape does not match, ensuring the ParticleGroup batch
+  dimensions are always consistent with all other observables on the same `DataPoint2`.
+- **HDF5 group attrs:** The `ParticleGroup` group carries `@control`, `@location`
+  (location-primary only), and `@num_feature_dims` (= n_particles) — consistent
+  with numeric observable metadata.
+- **HDF5 path:** Always written under the fixed group name `ParticleGroup` inside the
+  location group, e.g. `observables/<location>/ParticleGroup/<species>/`.
+- **Ensemble metadata:** `@ensembleShape` on the species subgroup is the authoritative
+  N-D batch shape for round-trip recovery; `@numDistributions` is a scalar convenience
+  equal to `prod(batch_dims)`.
 
 ### Dimension Validation
 

@@ -85,10 +85,14 @@ class TestParticleEnsembleStorage:
 
         with h5py.File(out_file, "r") as f:
             loc_grp = f["observables/screen1"]
-            assert "beam" in loc_grp
-            beam_grp = loc_grp["beam"]
-            assert "electron" in beam_grp
-            species_grp = beam_grp["electron"]
+            assert "ParticleGroup" in loc_grp
+            assert "beam" not in loc_grp
+            pg_grp = loc_grp["ParticleGroup"]
+            assert pg_grp.attrs["control"] == False
+            assert pg_grp.attrs["location"] == "screen1"
+            assert pg_grp.attrs["num_feature_dims"] == n_particle
+            assert "electron" in pg_grp
+            species_grp = pg_grp["electron"]
             assert species_grp.attrs["numDistributions"] == n_batch
             assert tuple(species_grp.attrs["ensembleShape"]) == (n_batch,)
             assert species_grp["position/x"].shape == (n_batch, n_particle)
@@ -102,7 +106,7 @@ class TestParticleEnsembleStorage:
         dp.saveHDF5(out_file)
 
         with h5py.File(out_file, "r") as f:
-            species_grp = f["observables/screen1/beam/electron"]
+            species_grp = f["observables/screen1/ParticleGroup/electron"]
             assert species_grp.attrs["numDistributions"] == 1
             assert species_grp["position/x"].shape == (1, 8)
 
@@ -116,7 +120,7 @@ class TestParticleEnsembleStorage:
         dp.saveHDF5(out_file)
 
         with h5py.File(out_file, "r") as f:
-            species_grp = f["observables/screen1/beam/electron"]
+            species_grp = f["observables/screen1/ParticleGroup/electron"]
             assert species_grp.attrs["numDistributions"] == 6
             assert tuple(species_grp.attrs["ensembleShape"]) == (3, 2)
             # datasets have shape (*batch_dims, n_particle)
@@ -132,7 +136,7 @@ class TestParticleEnsembleStorage:
         dp.saveHDF5(out_file)
 
         with h5py.File(out_file, "r") as f:
-            species_grp = f["observables/screen1/beam/electron"]
+            species_grp = f["observables/screen1/ParticleGroup/electron"]
             assert species_grp.attrs["numDistributions"] == 24
             assert tuple(species_grp.attrs["ensembleShape"]) == (2, 3, 4)
             assert species_grp["position/x"].shape == (2, 3, 4, n_particle)
@@ -177,5 +181,22 @@ class TestParticleEnsembleStorage:
 
         with h5py.File(out_file, "r") as f:
             loc_grp = f["observables/screen1"]
+            assert "ParticleGroup" in loc_grp, "Expected fixed 'ParticleGroup' group"
+            assert "beam" not in loc_grp, "data_name 'beam' should not be a direct child"
             for key in loc_grp.keys():
                 assert not key.startswith("beam_"), f"Found old-style index group '{key}'"
+
+    def test_particlegroup_has_observable_attrs(self, tmp_path):
+        """ParticleGroup group carries @control, @location, @num_feature_dims attrs."""
+        n_particle = 12
+        dp = _make_datapoint_with_pg(3, n_particle, location="injector")
+
+        out_file = str(tmp_path / "test_pg_attrs.h5")
+        dp.saveHDF5(out_file)
+
+        with h5py.File(out_file, "r") as f:
+            pg_grp = f["observables/injector/ParticleGroup"]
+            assert pg_grp.attrs["control"] == False
+            assert pg_grp.attrs["location"] == "injector"
+            assert pg_grp.attrs["num_feature_dims"] == n_particle
+
