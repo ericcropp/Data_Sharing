@@ -29,7 +29,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install numpy pandas h5py pyyaml pytest pytest-cov
-        pip install pmd-beamphysics
+        pip install git+https://github.com/ericcropp/openPMD-beamphysics.git@master
         pip install -e .
     
     - name: Run tests
@@ -64,7 +64,8 @@ jobs:
       shell: bash -l {0}
       run: |
         conda install -y numpy pandas h5py pyyaml pytest pytest-timeout
-        conda install -y openpmd-beamphysics lume-impact
+        conda install -y lume-impact
+        pip install git+https://github.com/ericcropp/openPMD-beamphysics.git@master
         pip install -e .
     
     - name: Run integration tests

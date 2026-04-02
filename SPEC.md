@@ -73,8 +73,10 @@ Two storage patterns:
 - **`location_primary=False`**: Data grouped by type with shared location array
 
 ### 4. ParticleGroup & Data Support
-- **Scalar/array data**: Stored as HDF5 datasets
-- **ParticleGroups**: Stored using openPMD-beamphysics native format
+- **Scalar/array data**: Stored as HDF5 datasets with shape `*batch_dims + feature_dims`
+- **ParticleGroups**: Stored using the openPMD-beamphysics N-D ensemble format;
+  each particle component has shape `*batch_dims + (n_particles,)` — the same leading
+  dimensions as numeric observables, making batch iteration uniform across data types
 
 ---
 
@@ -373,31 +375,82 @@ Same as location-primary storage except:
 
 ### ParticleGroup Storage
 
-**Special Handling:** ParticleGroups stored as HDF5 groups, not datasets
+**Ensemble Format:** ParticleGroups are stored using the openPMD-beamphysics ensemble format
+(`write_particle_ensemble` / `read_particle_ensemble` from the
+[custom fork](https://github.com/ericcropp/openPMD-beamphysics)).
 
-**Naming Convention:**
-- 0-D arrays (single ParticleGroup): `<name>_0`
-- N-D arrays: `<name>_i_j_k` where i,j,k are batch indices
+**Storage Layout:**
+Each component (`x`, `px`, `y`, `py`, `z`, `pz`, `t`, `weight`, `status`) is stored as an
+**N-D dataset** of shape `(*batch_dims, n_particles)` inside a species subgroup — directly
+mirroring the shape of a regular numeric observable.  The species group carries an
+`ensembleShape` attribute (equal to `batch_dims`) and a scalar `numDistributions` attribute.
 
 **Examples:**
 ```
-batch_dims = ()  →  initial_particles_0
-batch_dims = (5,)  →  initial_particles_0, initial_particles_1, ..., initial_particles_4
-batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., initial_particles_1_2
+batch_dims = ()      → ensemble with ensembleShape=[] ,  dataset shape (n_particles,)
+batch_dims = (5,)    → ensemble with ensembleShape=[5],  dataset shape (5, n_particles)
+batch_dims = (3, 4)  → ensemble with ensembleShape=[3,4], dataset shape (3, 4, n_particles)
 ```
 
-**Structure:** Uses openPMD-beamphysics native format with:
-- Particle coordinates (x, y, z)
-- Momenta (px, py, pz)
-- Time (t)
-- Weights, status, charge, mass
-- Per-quantity unit attributes
+**HDF5 structure (ensemble):**
+```
+<parent_group>/
+  <observable_name>/
+    <species>/                            (e.g. "electron")
+      @speciesType    = "electron"
+      @numParticles   = n_particles
+      @numDistributions = prod(batch_dims)
+      @ensembleShape  = batch_dims        ← N-D shape; matches batch_dims of observable
+      @totalCharge    = ...
+      @chargeUnitSI   = 1.0
+      position/
+        x   (*batch_dims, n_particles)    ← same leading dims as a regular observable
+        y   (*batch_dims, n_particles)
+      momentum/
+        x   (*batch_dims, n_particles)
+        y   (*batch_dims, n_particles)
+        z   (*batch_dims, n_particles)
+      time    (*batch_dims, n_particles)
+      weight  (*batch_dims, n_particles)
+      particleStatus (*batch_dims, n_particles)
+```
+
+**Batch dimensions:**
+- All batch shapes are supported: 0-D `()`, 1-D `(N,)`, and arbitrary N-D
+  (e.g., `(3, 4)` for a 2-D parameter scan over a pair of knobs).
+- `ensembleShape` records the exact batch shape so it can be recovered on read-back.
+
+**Unified Dimension Model:**
+
+ParticleGroup components (`x`, `px`, `y`, …) follow the **same dimension convention**
+as all other observables in this standard:
+
+| Dimension type | Regular numeric data | ParticleGroup components |
+|---|---|---|
+| Batch dims | Leading axes of dataset | Leading axes `*batch_dims` |
+| Feature dims | Trailing axes (num_feature_dims) | Fixed trailing axis: `n_particles` |
+| Location dim | Between batch and feature | N/A (no per-location replication) |
+
+This means a `batch_dims = (3, 4)` parameter scan produces identically-shaped leading
+dimensions whether the observable is an emittance scalar, a beam-size profile, or a full
+ParticleGroup:
+
+```
+emittance dataset   shape: (3, 4)              → batch_dims only
+profile dataset     shape: (3, 4, 512)         → batch_dims + 1 feature dim
+ParticleGroup x     shape: (3, 4, n_particles) → batch_dims + particle dim
+```
+
+The particle dimension plays the role of the feature dimension for ParticleGroups.
+Consequently, `num_feature_dims` is always 0 for ParticleGroup observables — the
+particle array is handled internally by the ensemble format.
 
 **Requirements:**
-- Container must be numpy object array
+- Container must be numpy object array with `dtype=object`
 - All elements must be ParticleGroup instances
-- No dataset attributes (units, control, etc.) stored
-- Each ParticleGroup is self-contained with internal metadata
+- All distributions must share the same species and number of particles
+- No dataset attributes (units, control, etc.) stored — ParticleGroups carry
+  their own internal openPMD metadata
 
 ### Data Type Requirements
 
@@ -411,6 +464,7 @@ batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., init
 - **dtype:** Must be `object`
 - **Content validation:** Every element must be ParticleGroup instance
 - **Shape validation:** Must match batch_dims exactly (no location or feature dims)
+- **Batch dimensions:** Supports arbitrary N-D batch_dims via `ensembleShape` attribute
 
 ### Dimension Validation
 
@@ -488,7 +542,9 @@ The following rules are enforced when creating and combining HDF5 files:
 **ParticleGroup Rules:**
 - Container must be numpy object array with dtype='object'
 - All elements must be ParticleGroup instances
+- All distributions must share the same species and n_particle
 - Shape must match batch_dims exactly (no location or feature dims)
+- Supports arbitrary N-D batch_dims; ensembleShape attribute records the full shape
 
 **Data Type Rules:**
 - Regular numeric data: float32, float64, int32, int64

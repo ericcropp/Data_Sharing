@@ -110,18 +110,18 @@ Dependencies:
 - os: File system operations
 - copy: Deep copying for ParticleGroup handling
 
-Version: 0.1.0
+Version: 0.2.0
 """
 import numpy as np
 import pandas as pd
-from pmd_beamphysics import ParticleGroup, units
+from pmd_beamphysics import ParticleGroup, units, write_particle_ensemble, read_particle_ensemble
 import hashlib
 import json
 import h5py
 import os
 import copy
 
-VERSION = '0.1.0'
+VERSION = '0.2.0'
 
 def unit_checker(unit):
     """
@@ -1110,20 +1110,11 @@ class DataPoint2:
 
                     # Handle ParticleGroup objects specially
                     if observable.has_particlegroup:
-                        # Write each ParticleGroup to its own HDF5 group with index-based naming
-                        for idx in np.ndindex(observable.data.shape):
-                            pg = observable.data[idx]
-                            # Create path using indices: name_i_j_k for batch_dims
-                            # For 0-D arrays (batch_dims=()), idx is (), so use '0' as the index
-                            if len(idx) == 0:
-                                idx_str = '0'
-                            else:
-                                idx_str = '_'.join(map(str, idx))
-                            path = observable.data_name + '_' + idx_str
-                            pg_grp = multi_loc_grp.create_group(path)
-                            pg.write(pg_grp)
-                        # Note: No dataset needed - ParticleGroups are directly accessible by index
-                        # Skip attribute setting for ParticleGroups as they don't have a dataset
+                        # Write ParticleGroup ensemble under fixed "ParticleGroup" group
+                        pg_grp = multi_loc_grp.require_group("ParticleGroup")
+                        pg_grp.attrs["control"] = observable.control
+                        pg_grp.attrs["num_feature_dims"] = int(observable.data.flat[0].n_particle)
+                        write_particle_ensemble(pg_grp, observable.data)
                         continue
                     else:
                         # Regular numeric data
@@ -1155,20 +1146,12 @@ class DataPoint2:
 
                     # Handle ParticleGroup data
                     if observable.has_particlegroup:
-                        # Write each ParticleGroup to its own HDF5 group with index-based naming
-                        for idx in np.ndindex(observable.data.shape):
-                            pg = observable.data[idx]
-                            # Create path using indices: name_i_j_k for batch_dims
-                            # For 0-D arrays (batch_dims=()), idx is (), so use '0' as the index
-                            if len(idx) == 0:
-                                idx_str = '0'
-                            else:
-                                idx_str = '_'.join(map(str, idx))
-                            path = observable.data_name + '_' + idx_str
-                            pg_grp = out_grp.create_group(path)
-                            pg.write(pg_grp)
-                        # Note: No dataset needed - ParticleGroups are directly accessible by index
-                        # Skip attribute setting for ParticleGroups as they don't have a dataset
+                        # Write ParticleGroup ensemble under fixed "ParticleGroup" group
+                        pg_grp = out_grp.require_group("ParticleGroup")
+                        pg_grp.attrs["control"] = observable.control
+                        pg_grp.attrs["location"] = location_str
+                        pg_grp.attrs["num_feature_dims"] = int(observable.data.flat[0].n_particle)
+                        write_particle_ensemble(pg_grp, observable.data)
                         continue
                     else:
                         dataset = out_grp.create_dataset(observable.data_name, data=np.array(observable.data))

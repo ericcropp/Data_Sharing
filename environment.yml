@@ -7,8 +7,9 @@ dependencies:
   - pandas=2.3.3
   - h5py=3.14.0
   - pyyaml=6.0.3
-  - openpmd-beamphysics=0.10.2
   - pip=25.2
   - lume-impact=0.10.2
+  - pip:
+    - git+https://github.com/ericcropp/openPMD-beamphysics.git@master
   
     

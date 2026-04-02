@@ -15,8 +15,8 @@ This project defines a **minimal, evolving standard** for storing such data, alo
 ## Features
 
 - **Flexible data dimensions**: Support for 0D scalars, 1D waveforms, 2D images, and higher-dimensional data
-- **ParticleGroup support**: Native handling of particle distribution data via `pmd_beamphysics`
-- **Batch processing**: Built-in support for multi-dimensional scans.
+- **Batch processing**: Built-in support for arbitrary N-D parameter scans (`batch_dims=(n1, n2, ...)`)
+- **ParticleGroup support**: Full N-D batch support for particle distributions via the [custom openPMD-beamphysics fork](https://github.com/ericcropp/openPMD-beamphysics). Each particle component (`x`, `px`, `y`, …) is stored with shape `(*batch_dims, n_particles)` — the same leading dimensions as any other observable, so numeric scalars, profiles, and full phase-space distributions all live on the same batch grid.
 - **Metadata tracking**: Lattice, simulation, and run information
 - **HDF5 storage**: Efficient, hierarchical data storage
 - **Validation utilities**: Automatic checking of data dimensions and units
