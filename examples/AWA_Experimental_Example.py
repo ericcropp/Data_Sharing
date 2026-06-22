@@ -325,6 +325,7 @@ def main():
     D.add_lattice(lattice_location=lattice_location)    
 
     D.add_run_information(source=metadata['source'], date=metadata['date'], notes=metadata['notes'])
+    D.add_batch_labels(['file', 'shot'])
     D.finalize()
 
     os.makedirs(args.output_dir, exist_ok=True)

@@ -1,6 +1,6 @@
 # Data Standard Specification
 
-**Version:** 2026-01-26  
+**Version:** 2026-06-22  
 **Document Status:** Complete Technical Specification
 
 ---
@@ -117,6 +117,7 @@ The HDF5 file structure for combined files follows this hierarchy:
     ├── @Data_Standard_Version              # Group attribute: Version for this data point
     ├── @ID                                 # Group attribute: Unique identifier (hash)
     ├── @batch_dims                         # Group attribute: Tuple of batch dimension sizes
+    ├── @batch_labels                       # Group attribute: (Optional) Labels for batch dimensions
     ├── @run_information_source             # Group attribute: Data source (e.g., "FACET-II")
     ├── @run_information_date               # Group attribute: Date in YYYY-MM-DD format
     ├── @run_information_notes              # Group attribute: Optional notes
@@ -145,9 +146,11 @@ The HDF5 file structure for combined files follows this hierarchy:
         │           └── position/x  (*batch_dims, n_particles)
         │
         └── multi_location_data/            # Multi-location storage
+            ├── @data_locations_key              # Group attribute: MUST specify the dataset name containing locations
             ├── DATA_LOCATIONS              # Dataset: location array
             │   ├── @units                  # Dataset attribute: Location units
-            │   └── @num_feature_dims       # Dataset attribute: Always 0 for locations
+            │   ├── @num_feature_dims       # Dataset attribute: Always 0 for locations
+            │   └── @batch_dims             # Dataset attribute: Always "N/A" (batches do not apply)
             │
             ├── <observable_name>           # Dataset: batch_dims + (locations,) + feature_dims (numeric)
             │   ├── @control                # Dataset attribute: Boolean
@@ -245,11 +248,23 @@ The HDF5 file structure for combined files follows this hierarchy:
 - **Requirement:** Must be non-empty and unique
 
 #### @batch_dims
-- **Type:** Tuple/Array of positive integers
-- **Stored as:** Numpy array in HDF5 (empty array for single point)
-- **Requirement:** All elements must be positive integers > 0
+- **Type:** Tuple/Array of positive integers, or the string `"N/A"`
+- **Stored as:** Numpy array in HDF5 (empty array for single point), or string `"N/A"`
+- **Requirement:** All elements must be positive integers > 0 (when numeric)
 - **Rule:** Product of batch_dims must equal number of data points in batch
 - **Empty tuple:** `()` indicates single data point (not batched)
+- **Special value `"N/A"`:** Indicates that batch dimensions do not apply to this dataset. This value is ONLY permitted on the DATA_LOCATIONS dataset within `multi_location_data/`. All other datasets must have a numeric `batch_dims`.
+
+#### @batch_labels
+- **Type:** Array of strings
+- **Requirement:** Optional
+- **Purpose:** Human-readable labels describing the meaning of each batch dimension
+- **Rule:** If present, length must equal `len(batch_dims)` (i.e., one label per batch dimension)
+- **Special case:** When `batch_dims = ()` (empty), batch_labels may be a single string describing the lone data point
+- **Examples:**
+  - `batch_dims = [5]` → `batch_labels = ["quadrupole_strength"]` (1 label)
+  - `batch_dims = [5, 2]` → `batch_labels = ["quadrupole_strength", "solenoid_current"]` (2 labels)
+  - `batch_dims = []` → `batch_labels = ["baseline_measurement"]` (1 label, special case)
 
 #### @run_information_source
 - **Type:** String
@@ -366,6 +381,15 @@ When `num_feature_dims > 0`, the following attributes are **required** and must 
 **Structure:** `/<ID>/observables/multi_location_data/`
 **Use Case:** Multiple observation points along beamline with shared location array
 
+**Group Attributes:**
+
+##### @data_locations_key
+- **Type:** String
+- **Requirement:** MUST be specified when `multi_location_data` group exists
+- **Purpose:** Specifies the name of the dataset within this group that contains the location coordinates
+- **Default value:** `"DATA_LOCATIONS"`
+- **Rule:** The named dataset must exist within the `multi_location_data` group
+
 **Special Dataset:**
 
 ##### DATA_LOCATIONS
@@ -375,8 +399,10 @@ When `num_feature_dims > 0`, the following attributes are **required** and must 
 - **Attributes:**
   - `@units`: Location units (typically "m" for position along beamline)
   - `@num_feature_dims`: Always 0 (locations are scalar coordinates)
+  - `@batch_dims`: Always `"N/A"` — batch dimensions do not apply to the location array itself
 - **Requirement:** All observables in multi_location_data must share identical DATA_LOCATIONS
 - **Requirement:** location_units must be specified
+- **Note:** The `@batch_dims = "N/A"` is the standard notation indicating that batch dimensions do not apply to this dataset. This is ONLY permitted for DATA_LOCATIONS; all other datasets must carry a numeric `batch_dims`. The location array is a shared coordinate axis, not a per-batch quantity.
 
 **Observable Datasets:**
 
@@ -550,6 +576,7 @@ The following rules are enforced when creating and combining HDF5 files:
 - batch_dims product must equal actual number of data points
 - All elements in batch_dims must be positive integers (> 0)
 - Empty batch_dims `()` indicates a single data point
+- If @batch_labels is present, its length must equal `len(batch_dims)` (or 1 when batch_dims is empty)
 
 **Observable Rules:**
 - control attribute must be boolean type
@@ -559,8 +586,11 @@ The following rules are enforced when creating and combining HDF5 files:
 - unit_multiplier must be positive (> 0)
 
 **Multi-Location Rules:**
+- `@data_locations_key` attribute MUST be specified on the `multi_location_data` group
+- The dataset named by `@data_locations_key` must exist within the group
 - All observables in multi_location_data must share identical DATA_LOCATIONS
 - location_units must be specified for multi-location data
+- DATA_LOCATIONS dataset must have `@batch_dims = "N/A"`
 
 **ParticleGroup Rules:**
 - Container must be numpy object array with dtype='object'

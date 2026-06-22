@@ -1,6 +1,6 @@
 [project]
 name = "data-standard"
-version = "0.2.0"
+version = "0.2.1"
 description = "Cross-institution data standard and Python utilities for simulation and experimental data exchange"
 requires-python = ">=3.10"
 readme = "README.md"

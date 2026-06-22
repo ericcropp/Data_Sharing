@@ -110,7 +110,7 @@ Dependencies:
 - os: File system operations
 - copy: Deep copying for ParticleGroup handling
 
-Version: 0.2.0
+Version: 0.2.1
 """
 import numpy as np
 import pandas as pd
@@ -121,7 +121,7 @@ import h5py
 import os
 import copy
 
-VERSION = '0.2.0'
+VERSION = '0.2.1'
 
 def unit_checker(unit):
     """
@@ -814,6 +814,7 @@ class DataPoint2:
         self.ID = ""
         self.run_information = RunInformation(run_information if run_information is not None else {})
         self.scalar_output_list = []
+        self.batch_labels = None
     def make_ID(self):
         """
         Generates a unique ID for the data point.
@@ -894,6 +895,25 @@ class DataPoint2:
         self.run_information.add_run_information(source, date, notes)
         return self
 
+    def add_batch_labels(self, batch_labels):
+        """
+        Adds optional batch labels describing what each batch dimension represents.
+        Args:
+            batch_labels (list of str): One label per batch dimension.
+                For batch_dims=() (empty), provide a single-element list.
+        Returns:
+            self: The DataPoint2 instance.
+        Raises:
+            TypeError: If batch_labels is not a list of strings.
+            ValueError: If length does not match batch_dims requirements.
+        """
+        if not isinstance(batch_labels, list):
+            raise TypeError(f"batch_labels must be a list, got {type(batch_labels)}")
+        if not all(isinstance(label, str) for label in batch_labels):
+            raise TypeError("All elements of batch_labels must be strings")
+        self.batch_labels = batch_labels
+        return self
+
     def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=False):
         """
         Adds an observable to the data point.
@@ -949,6 +969,7 @@ class DataPoint2:
         - Run information completeness
         - Summary structure
         - Simulation metadata (if present)
+        - Batch labels (if present)
         
         Returns:
             self: The DataPoint2 instance.
@@ -961,6 +982,17 @@ class DataPoint2:
         self.run_information.run_info_checker()
         if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
             self.simulation_metadata.sim_data_checker()
+        # Validate batch_labels if present
+        if self.batch_labels is not None:
+            if len(self.observables) > 0:
+                batch_dims = self.observables[0].batch_dims
+                expected_len = len(batch_dims) if len(batch_dims) > 0 else 1
+                if len(self.batch_labels) != expected_len:
+                    raise ValueError(
+                        f"batch_labels length ({len(self.batch_labels)}) must match "
+                        f"len(batch_dims) ({len(batch_dims)})"
+                        f"{' (or 1 for empty batch_dims)' if len(batch_dims) == 0 else ''}"
+                    )
         return self
 
     def finalize(self):
@@ -1081,6 +1113,8 @@ class DataPoint2:
                     # Create or get the "multi_location_data" group
                     if "multi_location_data" not in observables_grp:
                         multi_loc_grp = observables_grp.create_group("multi_location_data")
+                        # Set required group attribute specifying the locations dataset name
+                        multi_loc_grp.attrs["data_locations_key"] = "DATA_LOCATIONS"
                         
                         # Create DATA_LOCATIONS dataset on first observable
                         location_value = observable.location if isinstance(observable.location, np.ndarray) else np.array(observable.location)
@@ -1091,6 +1125,7 @@ class DataPoint2:
                             loc_dataset = multi_loc_grp.create_dataset("DATA_LOCATIONS", data=location_value)
                         loc_dataset.attrs["units"] = observable.location_units
                         loc_dataset.attrs["num_feature_dims"] = observable.num_feature_dims
+                        loc_dataset.attrs["batch_dims"] = "N/A"
                     else:
                         multi_loc_grp = observables_grp["multi_location_data"]
                         
@@ -1194,6 +1229,9 @@ class DataPoint2:
                 f.attrs["batch_dims"] = np.array(self.observables[0].batch_dims)
             else:
                 f.attrs["batch_dims"] = np.array([])
+            # Store batch_labels if present
+            if self.batch_labels is not None:
+                f.attrs["batch_labels"] = self.batch_labels
             f.attrs["run_information_source"] = self.run_information.source
             f.attrs["run_information_date"] = self.run_information.date
             f.attrs["run_information_notes"] = self.run_information.notes

@@ -364,6 +364,12 @@ def add_datapoints(batch_dims, VCC, data_subset, image_subset, input_cols, scala
         notes=metadata['notes']
     )
     
+    # Add batch labels describing what the batch dimensions represent
+    if len(batch_dims) == 0:
+        D.add_batch_labels(['shot'])
+    else:
+        D.add_batch_labels(['shot'])
+    
     # Save data point to HDF5 file
     os.makedirs(output_dir, exist_ok=True)
     D.saveHDF5(output_dir)

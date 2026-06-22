@@ -496,6 +496,12 @@ def add_datapoints(batch_dims,
         # Add as observable with control=True to indicate it's an input parameter
         D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, data_name=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True, control=True)
     
+    # Add batch labels describing what the batch dimensions represent
+    if len(batch_dims) == 0:
+        D.add_batch_labels(['simulation'])
+    else:
+        D.add_batch_labels(['simulation'])
+    
     # Save the complete data point to HDF5 file
     os.makedirs(output_dir, exist_ok=True)
     D.saveHDF5(output_dir)
