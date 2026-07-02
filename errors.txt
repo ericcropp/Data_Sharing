@@ -1,0 +1,95 @@
+Run pytest tests/ -v -m "slow" --timeout=600
+============================= test session starts ==============================
+platform linux -- Python 3.10.20, pytest-9.1.1, pluggy-1.6.0 -- /home/runner/miniconda3/envs/test/bin/python3.10
+cachedir: .pytest_cache
+rootdir: /home/runner/work/Data_Sharing/Data_Sharing
+configfile: pytest.ini
+plugins: timeout-2.4.0
+timeout: 600.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 28 items / 14 deselected / 14 selected
+
+tests/test_facet_ii_simulation.py::test_facet_ii_simulation_example_runs FAILED [  7%]
+tests/test_facet_ii_simulation.py::test_output_hdf5_structure FAILED     [ 14%]
+tests/test_facet_ii_simulation.py::test_lattice_data_present FAILED      [ 21%]
+tests/test_facet_ii_simulation.py::test_observables_present FAILED       [ 28%]
+tests/test_facet_ii_simulation.py::test_simulation_metadata_present FAILED [ 35%]
+tests/test_facet_ii_simulation.py::test_data_round_trip FAILED           [ 42%]
+tests/test_facet_ii_simulation.py::test_combine_files_option FAILED      [ 50%]
+tests/test_facet_ii_to_ml.py::test_to_ml_script_runs SKIPPED (Data S...) [ 57%]
+tests/test_facet_ii_to_ml.py::test_output_structure SKIPPED (Data St...) [ 64%]
+tests/test_facet_ii_to_ml.py::test_features_table_dtype SKIPPED (Dat...) [ 71%]
+tests/test_facet_ii_to_ml.py::test_targets_table_has_values SKIPPED      [ 78%]
+tests/test_facet_ii_to_ml.py::test_particle_groups_copied SKIPPED (D...) [ 85%]
+tests/test_facet_ii_to_ml.py::test_n_shots_matches_source SKIPPED (D...) [ 92%]
+tests/test_facet_ii_to_ml.py::test_screen_autodetection SKIPPED (Dat...) [100%]
+
+=================================== FAILURES ===================================
+____________________ test_facet_ii_simulation_example_runs _____________________
+
+temp_output_dir = '/tmp/test_facet_ii_jrq9jm41', check_data_available = None
+
+    @pytest.mark.slow
+    def test_facet_ii_simulation_example_runs(temp_output_dir, check_data_available):
+        """Test that the FACET-II simulation example script runs without errors."""
+        script_path = EXAMPLES_DIR / "FACET-II_Simulation_Example.py"
+    
+        # Run the script with subprocess
+        cmd = [
+            sys.executable,
+            str(script_path),
+            "--input_dir", str(DATA_INPUT_DIR),
+            "--output_dir", str(temp_output_dir),
+            "--lattice_dir", str(LATTICE_FILES_DIR),
+SKIPPED [1] tests/test_facet_ii_to_ml.py:141: Data Standard file not found at /home/runner/work/Data_Sharing/Data_Sharing/examples/data/output/FACET-II_Simulation_Example/FACET-II_Simulation_Example_v0.1.1.h5. Run FACET-II_Simulation_Example.py first.
+SKIPPED [1] tests/test_facet_ii_to_ml.py:166: Data Standard file not found at /home/runner/work/Data_Sharing/Data_Sharing/examples/data/output/FACET-II_Simulation_Example/FACET-II_Simulation_Example_v0.1.1.h5. Run FACET-II_Simulation_Example.py first.
+SKIPPED [1] tests/test_facet_ii_to_ml.py:204: Data Standard file not found at /home/runner/work/Data_Sharing/Data_Sharing/examples/data/output/FACET-II_Simulation_Example/FACET-II_Simulation_Example_v0.1.1.h5. Run FACET-II_Simulation_Example.py first.
+SKIPPED [1] tests/test_facet_ii_to_ml.py:230: Data Standard file not found at /home/runner/work/Data_Sharing/Data_Sharing/examples/data/output/FACET-II_Simulation_Example/FACET-II_Simulation_Example_v0.1.1.h5. Run FACET-II_Simulation_Example.py first.
+FAILED tests/test_facet_ii_simulation.py::test_facet_ii_simulation_example_runs - AssertionError: Script failed with error:
+  Traceback (most recent call last):
+    File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 669, in <module>
+      main()
+    File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 606, in main
+      D, summary_table = add_datapoints(
+    File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 457, in add_datapoints
+      D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_units='m', location_primary=False, control=False)
+    File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 915, in add_observable
+      self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary=location_primary, control=control)
+    File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 610, in add_observable
+      output = SingleObservable(
+    File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 339, in __init__
+      prefix, valid_units = unit_checker(units)
+    File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 154, in unit_checker
+      for pro in list(units.PREFIX_FACTOR.keys()) + list(units.SHORT_PREFIX_FACTOR.keys()):
+  AttributeError: module 'beamphysics.units' has no attribute 'PREFIX_FACTOR'
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['/home/runner/miniconda3/envs/test/bin/python3.10', '/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py', '--input_dir', '/home/runner/work/Data_Sharing/Data_Sharing/tests/test_data/FACET-II_Simulation_Data', '--output_dir', '/tmp/test_facet_ii_jrq9jm41', '--lattice_dir', '/home/runner/work/Data_Sharing/Data_Sharing/tests/test_data/FACET-II_Simulation_Data/Lattice_Files', '--Combine_Files', 'False'], returncode=1, stdout='Processing file 1/2: /home/runner/work/Data_Sharing/Data_Sharing/tests/test_data/FACET-II_Simulation_Data/1.h5\n', stderr='Traceback (most recent call last):\n  File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 669, in <module>\n    main()\n  File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 606, in main\n    D, summary_table = add_datapoints(\n  File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 457, in add_datapoints\n    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_units=\'m\', location_primary=False, control=False)\n  File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 915, in add_observable\n    self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary=location_primary, control=control)\n  File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 610, in add_observable\n    output = SingleObservable(\n  File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 339, in __init__\n    prefix, valid_units = unit_checker(units)\n  File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 154, in unit_checker\n    for pro in list(units.PREFIX_FACTOR.keys()) + list(units.SHORT_PREFIX_FACTOR.keys()):\nAttributeError: module \'beamphysics.units\' has no attribute \'PREFIX_FACTOR\'\n').returncode
+FAILED tests/test_facet_ii_simulation.py::test_output_hdf5_structure - AssertionError: No HDF5 files to test
+assert 0 > 0
+ +  where 0 = len([])
+FAILED tests/test_facet_ii_simulation.py::test_lattice_data_present - IndexError: list index out of range
+FAILED tests/test_facet_ii_simulation.py::test_observables_present - IndexError: list index out of range
+FAILED tests/test_facet_ii_simulation.py::test_simulation_metadata_present - IndexError: list index out of range
+FAILED tests/test_facet_ii_simulation.py::test_data_round_trip - IndexError: list index out of range
+FAILED tests/test_facet_ii_simulation.py::test_combine_files_option - AssertionError: Script failed: Traceback (most recent call last):
+    File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 669, in <module>
+      main()
+    File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 606, in main
+      D, summary_table = add_datapoints(
+    File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 457, in add_datapoints
+      D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_units='m', location_primary=False, control=False)
+    File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 915, in add_observable
+      self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary=location_primary, control=control)
+    File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 610, in add_observable
+      output = SingleObservable(
+    File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 339, in __init__
+      prefix, valid_units = unit_checker(units)
+    File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 154, in unit_checker
+      for pro in list(units.PREFIX_FACTOR.keys()) + list(units.SHORT_PREFIX_FACTOR.keys()):
+  AttributeError: module 'beamphysics.units' has no attribute 'PREFIX_FACTOR'
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['/home/runner/miniconda3/envs/test/bin/python3.10', '/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py', '--input_dir', '/home/runner/work/Data_Sharing/Data_Sharing/tests/test_data/FACET-II_Simulation_Data', '--output_dir', '/tmp/test_facet_ii_80_jc9vs', '--lattice_dir', '/home/runner/work/Data_Sharing/Data_Sharing/tests/test_data/FACET-II_Simulation_Data/Lattice_Files', '--Combine_Files', 'True'], returncode=1, stdout='Processing file 1/2: /home/runner/work/Data_Sharing/Data_Sharing/tests/test_data/FACET-II_Simulation_Data/1.h5\n', stderr='Traceback (most recent call last):\n  File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 669, in <module>\n    main()\n  File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 606, in main\n    D, summary_table = add_datapoints(\n  File "/home/runner/work/Data_Sharing/Data_Sharing/examples/FACET-II_Simulation_Example.py", line 457, in add_datapoints\n    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_units=\'m\', location_primary=False, control=False)\n  File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 915, in add_observable\n    self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary=location_primary, control=control)\n  File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 610, in add_observable\n    output = SingleObservable(\n  File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 339, in __init__\n    prefix, valid_units = unit_checker(units)\n  File "/home/runner/work/Data_Sharing/Data_Sharing/src/data_standard/Data_Standard_2.py", line 154, in unit_checker\n    for pro in list(units.PREFIX_FACTOR.keys()) + list(units.SHORT_PREFIX_FACTOR.keys()):\nAttributeError: module \'beamphysics.units\' has no attribute \'PREFIX_FACTOR\'\n').returncode
+=========== 7 failed, 7 skipped, 14 deselected, 1 warning in 17.94s ============

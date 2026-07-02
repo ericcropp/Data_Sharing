@@ -123,6 +123,24 @@ import copy
 
 VERSION = '0.1.1'
 
+# SI prefix factors — defined here for compatibility with beamphysics versions
+# that may not export PREFIX_FACTOR / SHORT_PREFIX_FACTOR.
+_PREFIX_FACTOR = getattr(units, 'PREFIX_FACTOR', {
+    'yocto': 1e-24, 'zepto': 1e-21, 'atto': 1e-18, 'femto': 1e-15,
+    'pico': 1e-12, 'nano': 1e-9, 'micro': 1e-6, 'milli': 1e-3,
+    'centi': 1e-2, 'deci': 1e-1, 'deca': 1e1, 'hecto': 1e2,
+    'kilo': 1e3, 'mega': 1e6, 'giga': 1e9, 'tera': 1e12,
+    'peta': 1e15, 'exa': 1e18, 'zetta': 1e21, 'yotta': 1e24,
+})
+_SHORT_PREFIX_FACTOR = getattr(units, 'SHORT_PREFIX_FACTOR', {
+    'y': 1e-24, 'z': 1e-21, 'a': 1e-18, 'f': 1e-15,
+    'p': 1e-12, 'n': 1e-9, 'µ': 1e-6, 'u': 1e-6, 'm': 1e-3,
+    'c': 1e-2, 'd': 1e-1, 'da': 1e1, 'h': 1e2,
+    'k': 1e3, 'M': 1e6, 'G': 1e9, 'T': 1e12,
+    'P': 1e15, 'E': 1e18, 'Z': 1e21, 'Y': 1e24,
+})
+
+
 def unit_checker(unit):
     """
     Checks if the provided unit is valid.
@@ -150,13 +168,13 @@ def unit_checker(unit):
         valid_unit = units.known_unit[unit]
         prefix = 1
     else:
-        # Check for prefix in units.PREFIX_FACTOR or units.SHORT_PREFIX_FACTOR
-        for pro in list(units.PREFIX_FACTOR.keys()) + list(units.SHORT_PREFIX_FACTOR.keys()):
+        # Check for prefix in SI prefix tables
+        for pro in list(_PREFIX_FACTOR.keys()) + list(_SHORT_PREFIX_FACTOR.keys()):
             if unit.startswith(pro):
                 base_unit = unit[len(pro):]
                 if base_unit in units.known_unit:
                     valid_unit = units.known_unit[base_unit]
-                    prefix = units.PREFIX_FACTOR.get(pro, units.SHORT_PREFIX_FACTOR.get(pro, 1))
+                    prefix = _PREFIX_FACTOR.get(pro, _SHORT_PREFIX_FACTOR.get(pro, 1))
 
 
     return float(prefix), valid_unit
