@@ -386,30 +386,34 @@ def add_datapoints(batch_dims,
         initial_particles_data = np.empty(num_pts, dtype=object)
         for i in range(len(I_list)):
             initial_particles_data[i] = I_list[i].particles['initial_particles']
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_name='VCC', units='m', location_primary=True, control=True)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_name='initial_particles', units='', location_primary=True, control=True)
     
+    # Mapping from Impact particle key to Data Standard data_name and drift z-position.
+    # drift_to_z() centers each ParticleGroup at the exact screen location,
+    # matching the convention in ml_to_data_standard.py.
+    PG_DATA_NAMES = {"PR10241": "241_particles", "L0AFEND": "L0AFEND_particles"}
+    PG_DRIFT_Z = {"PR10241": 0.942084, "L0AFEND": 4.127448}
+
     # Add particle data at intermediate screen/observer locations
     # These are the particle distributions captured at various points along the beamline
     for key, value in I_list[0].output['particles'].items():
         if key != 'final_particles' and key != 'initial_particles':
             if len(batch_dims) == 0:
                 particle_data = np.empty((), dtype=object)
-                particle_data[()] = I_list[0].output['particles'][key]
+                P = I_list[0].output['particles'][key]
+                if key in PG_DRIFT_Z:
+                    P.drift_to_z(z=PG_DRIFT_Z[key])
+                particle_data[()] = P
             else:
                 particle_data = np.empty(num_pts, dtype=object)
                 for i in range(len(I_list)):
-                    particle_data[i] = I_list[i].output['particles'][key]
-            D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=key, data=particle_data, attrs={}, data_name=key, units='m', location_primary=True, control=False)
-    
-    # Add final particle distribution at end of beamline
-    if len(batch_dims) == 0:
-        final_particles_data = np.empty((), dtype=object)
-        final_particles_data[()] = I_list[0].particles['final_particles']
-    else:
-        final_particles_data = np.empty(num_pts, dtype=object)
-        for i in range(len(I_list)):
-            final_particles_data[i] = I_list[i].particles['final_particles']
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=['final_particles'], data=final_particles_data, attrs={}, data_name='final_particles', units='m', location_primary=True, control=False)
+                    P = I_list[i].output['particles'][key]
+                    if key in PG_DRIFT_Z:
+                        P.drift_to_z(z=PG_DRIFT_Z[key])
+                    particle_data[i] = P
+            # Use data_name above (e.g. "241_particles")
+            data_name = PG_DATA_NAMES.get(key, key + "_particles")
+            D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=key, data=particle_data, attrs={}, data_name=data_name, units='', location_primary=True, control=False)
     
     # Add lattice configuration files (rfdata files, YAML templates, etc.)
     D.add_lattice(lattice_location='included', lattice_files=rfdata_contents)

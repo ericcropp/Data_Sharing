@@ -6,3 +6,5 @@ Old/
 examples/data/output/*
 !examples/data/output/.gitkeep
 *.egg-info/
+FACET-II_to_ML.py
+ml_to_data_standard.py

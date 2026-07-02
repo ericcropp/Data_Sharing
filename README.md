@@ -31,8 +31,9 @@ This project has been left intentionally minimal.
 - A small set of standardized data structures for accelerator lattices (to be replaced by PALS) and observables
 - Validation utilities
 - HDF5-based storage conventions
-- Reference examples for three cases:
+- Reference examples for four cases:
     - FACET-II Simulation Data
+    - FACET-II Simulation Data to ML-ready format
     - FACET-II Experimental Data
     - AWA Experimental Data
 
@@ -210,7 +211,7 @@ This mapping is stored as a 2xn dataset in the HDF5 file under `/lattice/lattice
 
 ## Examples
 
-Examples are provided in the `examples/` directory. Each example generates output files with the Data Standard version appended to the filename (e.g., `Example_Name_v0.1.0.h5`).
+Examples are provided in the `examples/` directory. Each example generates output files with the Data Standard version appended to the filename (e.g., `Example_Name_v0.1.1.h5`).
 
 ### FACET-II Simulation Data
 Processes Impact-T simulation archives with particle distributions:
@@ -218,6 +219,22 @@ Processes Impact-T simulation archives with particle distributions:
 python examples/FACET-II_Simulation_Example.py 
 ```
 Output: `FACET-II_Simulation_Example_v<version>.h5`
+
+### FACET-II Data Standard to ML-ready Format
+Converts the Data Standard HDF5 from the simulation example into an ML-ready file
+with compound-dtype feature/target tables and per-shot ParticleGroups. Run this
+immediately after `FACET-II_Simulation_Example.py`:
+```bash
+python examples/FACET-II_to_ML_Example.py
+```
+Output: `FACET-II_Simulation_Example_v<version>_ml.h5`
+
+The ML-ready file contains:
+- `features_<screen>/table` — compound dtype with scalar input parameters
+- `features_<screen>/initial_particles/<i>/` — cathode ParticleGroup per shot
+- `targets_<screen>/table` — beam properties (sigma_x, sigma_y, emittance, etc.)
+- `targets_<screen>/<screen>_particles/<i>/` — screen ParticleGroup per shot
+- `@meta` — JSON metadata with column names and provenance
 
 ### FACET-II Experimental Data
 Converts EPICS-based experimental data:
