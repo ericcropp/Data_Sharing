@@ -328,12 +328,13 @@ Two storage patterns are supported:
 When `num_feature_dims > 0`, the following attributes are **required** and must be provided in the `attrs` dictionary parameter when calling `add_observable()`:
 
 ##### @bin_size
-- **Type:** Float
+- **Type:** Float, or String (the `data_name` of another observable, used as a key)
 - **Requirement:** Required when num_feature_dims > 0; must be specified in attrs dict
 - **Purpose:** Physical size of one bin/pixel in feature space
 - **Units:** Match observable units
 - **Note:** Can be positive or negative (negative for reversed coordinate axes)
-- **Usage:** `attrs={'bin_size': 1e-6, 'offset': 0.0}`
+- **Per-shot bin sizes:** When the bin size differs across stacked/batched images, `bin_size` may be a string naming another observable (a key) instead of a float. The referenced observable must exist and its data must have dimension `batch_dims` (one bin size per batch element), i.e. its data shape must equal `batch_dims`.
+- **Usage:** `attrs={'bin_size': 1e-6, 'offset': 0.0}` or `attrs={'bin_size': 'PixelResolution', 'offset': 0.0}`
 
 ##### @offset
 - **Type:** Float
@@ -478,7 +479,8 @@ The following rules are enforced when creating and combining HDF5 files:
 - control attribute must be boolean type
 - num_feature_dims must be >= 0
 - When num_feature_dims > 0, bin_size and offset must be specified in attrs dict
-- bin_size and offset must be convertible to float
+- offset must be convertible to float
+- bin_size must be a float, or a string naming another observable (key) whose data has dimension batch_dims
 - unit_multiplier must be positive (> 0)
 
 **Multi-Location Rules:**

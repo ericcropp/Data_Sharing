@@ -335,19 +335,24 @@ class SingleObservable:
             if 'offset' not in self.attrs:
                 raise ValueError(f"For non-scalar data (num_feature_dims={self.num_feature_dims}), 'offset' must be specified in attrs")
             
-            # Coerce bin_size and offset to floats
-            try:
-                self.attrs['bin_size'] = float(self.attrs['bin_size'])
-            except (ValueError, TypeError) as e:
-                raise TypeError(f"bin_size must be convertible to float, got {type(self.attrs['bin_size'])}: {e}")
+            # bin_size may be a float, or a string naming another observable (key) whose
+            # data has dimension batch_dims (per-shot bin sizes); validated in observable_checker.
+            if isinstance(self.attrs['bin_size'], str):
+                if len(self.batch_dims) == 0:
+                    raise ValueError("bin_size may only be a string key when batch_dims is non-empty; use a float for single-shot data")
+            else:
+                try:
+                    self.attrs['bin_size'] = float(self.attrs['bin_size'])
+                except (ValueError, TypeError) as e:
+                    raise TypeError(f"bin_size must be a float or a string key, got {type(self.attrs['bin_size'])}: {e}")
             
             try:
                 self.attrs['offset'] = float(self.attrs['offset'])
             except (ValueError, TypeError) as e:
                 raise TypeError(f"offset must be convertible to float, got {type(self.attrs['offset'])}: {e}")
             
-            # Assert that bin_size and offset are floats
-            assert isinstance(self.attrs['bin_size'], float), f"bin_size must be float, got {type(self.attrs['bin_size'])}"
+            # bin_size must be a float or a string key; offset must be a float
+            assert isinstance(self.attrs['bin_size'], (float, str)), f"bin_size must be float or str, got {type(self.attrs['bin_size'])}"
             assert isinstance(self.attrs['offset'], float), f"offset must be float, got {type(self.attrs['offset'])}"
 
         if self.location_primary:
@@ -662,6 +667,26 @@ class Observables(list):
                         f"but observable at index {i} has batch_dims={observable.batch_dims}"
                     )
         
+        # On the strict (final) check, validate string bin_size references: the string
+        # must name another observable (key) whose data shape equals batch_dims.
+        if not allow_blank:
+            for observable in self:
+                if observable.num_feature_dims > 0 and isinstance(observable.attrs.get('bin_size'), str):
+                    key = observable.attrs['bin_size']
+                    target = tuple(observable.batch_dims)
+                    matches = [obs for obs in self if obs.data_name == key]
+                    if not matches:
+                        raise ValueError(
+                            f"bin_size='{key}' for observable '{observable.data_name}' "
+                            f"must match the data_name of another observable (key)"
+                        )
+                    if not any(obs.data is not None and tuple(np.shape(obs.data)) == target for obs in matches):
+                        shapes = [None if obs.data is None else tuple(np.shape(obs.data)) for obs in matches]
+                        raise ValueError(
+                            f"bin_size key '{key}' must reference data with dimension "
+                            f"batch_dims={target}, got shape(s) {shapes}"
+                        )
+
         for observable in self:
             observable.data_dim_checker()
 
