@@ -83,7 +83,8 @@ Two storage patterns:
   is an HDF5 group holding them; a location with exactly one observable is not given a group —
   the observable is stored directly under `observables/` and its location is recorded in
   `@location`. Every location-primary entry carries `@location`, whether nested or not.
-- **`location_primary=False`**: Data grouped by type with shared location array
+- **`location_primary=False`**: Data grouped by type with shared location array (for example a
+  simulation dataset where outputs are generated at many points throughout the beamline)
 
 ### 4. ParticleGroup & Data Support
 - **Scalar/array data**: Stored as HDF5 datasets
@@ -208,9 +209,10 @@ The HDF5 file structure for combined files follows this hierarchy:
 
 #### lattice_files/
 - **Purpose:** Contains all lattice configuration files
-- **Requirement:** Present when `@lattice_location = "included"`
-- **Content:** One dataset per file, with filename as dataset name
+- **Requirement:** Present and non-empty when `@lattice_location = "included"`
 - **File Content Type:** String or bytes
+- **Content:** Files are stored verbatim. This standard does not define a lattice format, and
+  validation only checks that the files are present; their contents are not interpreted.
 - **Rule:** All batches in a combined file must have identical lattice files
 
 **Optional Datasets:**
