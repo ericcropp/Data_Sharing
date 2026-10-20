@@ -335,16 +335,18 @@ def add_datapoints(batch_dims, VCC, data_subset, image_subset, input_cols, scala
     """
     # Create new data point object
     D = DataPoint2()
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'bin_size':float(data_subset['CAMR:LT10:900:RESOLUTION'].values[0]), 'offset': 0}, data_name='VCC_Image', units='um', location_primary=True, control=True)
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'bin_size':float(data_subset['PROF:IN10:571:RESOLUTION'].values[0]), 'offset': 0}, data_name='Screen_Image', units='um', location_primary=True, control=False)
-    # Populate scalar inputs for this shot
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['CAMR:LT10:900']], data=VCC, attrs={'bin_size':float(data_subset['CAMR:LT10:900:RESOLUTION'].values[0]), 'offset': 0}, data_name='VCC_Image', units='um', location_primary=True, read_only=False)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=[loc_dict['PROF:IN10:571']], data=image_subset, attrs={'bin_size':float(data_subset['PROF:IN10:571:RESOLUTION'].values[0]), 'offset': 0}, data_name='Screen_Image', units='um', location_primary=True, read_only=True)
+    # Scalar observables use the full PV as data_name, stored under the lattice element
+    # (location) that the device maps to, e.g. BPM10781/BPMS:IN10:781:TMIT.
+    # Populate scalar inputs (settable, read_only=False) for this shot
     for col in input_cols.keys():
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)
         # For single shots (len(batch_dims)==0), extract scalar value; for batches, keep as array
         if len(batch_dims) == 0:
             col_data = col_data[0]
         
-        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=input_cols[col], data_name=':'.join(col.split(':')[3:]), location_primary=True, control=True)
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=input_cols[col], data_name=col, location_primary=True, read_only=False)
     for col in scalar_output_cols.keys():
         # print(f"Adding output observable: {col}")
         col_data = np.asarray(data_subset[col].values, dtype=np.float64)
@@ -352,7 +354,7 @@ def add_datapoints(batch_dims, VCC, data_subset, image_subset, input_cols, scala
         if len(batch_dims) == 0:
             col_data = col_data[0]
         
-        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=scalar_output_cols[col], data_name=':'.join(col.split(':')[3:]), location_primary=True, control=False)
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=[loc_dict.get(':'.join(col.split(':')[:3]), col)], data=col_data, attrs={}, units=scalar_output_cols[col], data_name=col, location_primary=True, read_only=True)
 
     # Add lattice information and device location mapping
     D.add_lattice(lattice_location=lattice_location, PV_table=loc_dict)
@@ -490,7 +492,7 @@ def main():
         
         # Create combined file in output directory
         combined_path = os.path.join(args.output_dir, OUTPUT_FILENAME)
-        actual_combined_path = combine_files(args.output_dir, combined_path)
+        actual_combined_path = combine_files(args.output_dir, combined_path, validate=True)
         
         print(f"Combined file created at {actual_combined_path}")
     

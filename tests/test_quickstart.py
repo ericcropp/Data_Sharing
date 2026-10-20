@@ -8,7 +8,7 @@ import numpy as np
 import tempfile
 import shutil
 from pathlib import Path
-from data_standard import DataPoint2, SimulatedDataPoint2
+from data_standard import DataPoint2, SimulatedDataPoint2, validate_file
 import h5py
 
 
@@ -30,7 +30,7 @@ def test_quickstart_example():
             data=np.array(250.0),  # 0-D array for scalar
             data_name='charge',
             units='pC',
-            control=False
+            read_only=True  # measured quantity (legacy equivalent: control=False)
         )
 
         # Add a 2D image (e.g., screen image)
@@ -49,6 +49,9 @@ def test_quickstart_example():
         D.add_lattice(lattice_location='https://github.com/slaclab/facet2-lattice')
         D.add_run_information(source='FACET-II', date='2025-01-26', notes='Example run')
 
+        # Optional per-shot timestamps (ISO 8601 with UTC offset), shaped like batch_dims
+        D.add_timestamp('2025-01-26T13:55:40.050-08:00')
+
         # Finalize and save
         D.saveHDF5(str(output_dir))
         
@@ -62,20 +65,26 @@ def test_quickstart_example():
             assert 'observables' in f, "Missing observables group"
             assert 'ID' in f.attrs, "Missing ID attribute"
             
-            # Verify observables were saved
+            # Each location holds a single observable, so both are stored at the top
+            # level of observables/ with their location in the @location attribute.
             obs_grp = f['observables']
-            assert 'ICT1' in obs_grp, "Missing ICT1 location group"
-            assert 'Screen1' in obs_grp, "Missing Screen1 location group"
-            
-            # Verify charge observable
-            assert 'charge' in obs_grp['ICT1'], "Missing charge dataset"
-            charge_ds = obs_grp['ICT1']['charge']
+            assert 'charge' in obs_grp, "Missing charge dataset"
+            charge_ds = obs_grp['charge']
             assert charge_ds[()] == 250.0, "Charge value incorrect"
-            assert charge_ds.attrs['units'] == 'C', "Charge units incorrect (should be base unit)"
-            assert charge_ds.attrs['unit_multiplier'] == 1e-12, "Charge unit_multiplier incorrect"
+            assert charge_ds.attrs['location'] == 'ICT1'
+            assert charge_ds.attrs['units'] == 'pC', "Units must be stored with their SI prefix"
+            assert 'unit_multiplier' not in charge_ds.attrs
+            assert bool(charge_ds.attrs['read_only']) is True
+            assert 'control' not in charge_ds.attrs
             
-            # Verify image observable
-            assert 'image' in obs_grp['Screen1'], "Missing image dataset"
-            image_ds = obs_grp['Screen1']['image']
+            assert 'image' in obs_grp, "Missing image dataset"
+            image_ds = obs_grp['image']
+            assert image_ds.attrs['location'] == 'Screen1'
             assert image_ds.shape == (100, 200), "Image shape incorrect"
             assert image_ds.attrs['num_feature_dims'] == 2, "num_feature_dims incorrect"
+
+            assert obs_grp['Timestamp'].asstr()[()] == '2025-01-26T13:55:40.050-08:00'
+
+        report = validate_file(h5_files[0])
+        assert report.ok, report.format()
+        assert report.warnings == []

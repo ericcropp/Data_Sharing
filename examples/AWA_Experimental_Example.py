@@ -292,7 +292,7 @@ def main():
                 data_name=key, 
                 units=units[key],
                 location_primary=True,
-                control=control_keys[key]
+                read_only=not control_keys[key]
             )
         elif key == 'images':
             # 2D images from screen cameras
@@ -305,7 +305,7 @@ def main():
                 data_name=key, 
                 units=units[key],
                 location_primary=True,
-                control=control_keys[key],
+                read_only=not control_keys[key],
                 attrs={'bin_size': pxcal, 'offset': 0}
             )
         elif 'wf' in key or 'ICT:x' in key:
@@ -319,7 +319,7 @@ def main():
                 data_name=key, 
                 units=units[key],
                 location_primary=True,
-                control=control_keys[key],
+                read_only=not control_keys[key],
                 attrs={'bin_size': 1, 'offset': 0}
             )
     D.add_lattice(lattice_location=lattice_location)    
@@ -352,7 +352,7 @@ def main():
         
         # Create combined file in output directory
         combined_path = os.path.join(args.output_dir, OUTPUT_FILENAME)
-        actual_combined_path = combine_files(args.output_dir, combined_path)
+        actual_combined_path = combine_files(args.output_dir, combined_path, validate=True)
         
         print(f"Combined file created at {actual_combined_path}")
     

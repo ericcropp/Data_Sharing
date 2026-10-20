@@ -20,9 +20,13 @@ Data is organized into observables with the following structure:
 - feature_dims: Number of feature dimensions (0=scalar, 1=waveform, 2=image)
 - shots_per_batch: Number of shots per batch
 - location: Physical or logical location(s) in the beamline (distance from cathode or component name)
-- data_names: Names of the data fields (e.g., 'xrms' on a screen)
-- units: Physical units with automatic prefix handling
-- control: Boolean flag indicating control vs measured parameters
+- data_names: Names of the data fields. For experimental data use the full PV
+  (e.g., 'BPMS:IN10:781:TMIT'); for simulation data use the full parameter name.
+- units: Physical units stored as given, including any SI prefix (e.g., 'mW', 'pC')
+- read_only: Boolean flag; True for measured/read-back values, False for settable
+  (control) parameters. The legacy ``control`` flag (= not read_only) is still accepted.
+- Timestamp: Optional per-shot observable with the reserved name 'Timestamp' holding
+  ISO 8601 date-time strings with a UTC offset.
 
 Main Classes:
 -------------
@@ -72,7 +76,7 @@ Usage Example:
         data=np.array(250.0),  # 0-D array for scalar
         data_name='charge',
         units='pC',
-        control=False
+        read_only=True
     )
     
     # Add a 2D image (e.g., screen image)
@@ -110,7 +114,7 @@ Dependencies:
 - os: File system operations
 - copy: Deep copying for ParticleGroup handling
 
-Version: 0.1.1
+Version: 0.1.2
 """
 import numpy as np
 import pandas as pd
@@ -120,8 +124,125 @@ import json
 import h5py
 import os
 import copy
+import re
+import datetime
 
-VERSION = '0.1.1'
+VERSION = '0.1.2'
+
+# Reserved observable name for optional per-shot timestamps.
+TIMESTAMP_NAME = 'Timestamp'
+# Group holding observables that share a location array, and its location dataset.
+MULTI_LOCATION_GROUP = 'multi_location_data'
+DATA_LOCATIONS_NAME = 'DATA_LOCATIONS'
+
+# ISO 8601-1:2019 extended-format calendar date-time with a mandatory UTC designator
+# ('Z') or offset (±hh:mm), e.g. '2026-10-16T13:55:40.050-07:00'.
+_ISO8601_RE = re.compile(
+    r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:[.,](\d+))?(Z|([+-])(\d{2}):(\d{2}))$"
+)
+
+
+def is_iso8601_timestamp(value):
+    """
+    Check whether ``value`` is an ISO 8601 extended-format date-time with UTC offset.
+
+    Accepted form: ``YYYY-MM-DDThh:mm:ss[.fff...](Z|±hh:mm)``.
+
+    Args:
+        value (str or bytes): Candidate timestamp.
+
+    Returns:
+        bool: True if valid.
+    """
+    if isinstance(value, (bytes, np.bytes_)):
+        try:
+            value = value.decode('utf-8')
+        except UnicodeDecodeError:
+            return False
+    if not isinstance(value, str):
+        return False
+    m = _ISO8601_RE.match(value)
+    if not m:
+        return False
+    year, month, day, hour, minute, second = (int(g) for g in m.groups()[:6])
+    if second > 60:  # 60 permitted for leap seconds
+        return False
+    try:
+        datetime.datetime(year, month, day, hour, minute, min(second, 59))
+    except ValueError:
+        return False
+    if m.group(8) != 'Z':
+        if int(m.group(10)) > 23 or int(m.group(11)) > 59:
+            return False
+    return True
+
+
+def to_iso8601_string(value):
+    """
+    Convert a timestamp value to an ISO 8601 string accepted by the standard.
+
+    Args:
+        value (str, bytes, or timezone-aware datetime.datetime / pandas.Timestamp).
+
+    Returns:
+        str: ISO 8601 date-time string.
+
+    Raises:
+        TypeError: For unsupported types.
+        ValueError: For naive datetimes or malformed strings.
+    """
+    if isinstance(value, (bytes, np.bytes_)):
+        value = value.decode('utf-8')
+    if isinstance(value, (str, np.str_)):
+        value = str(value)
+        if not is_iso8601_timestamp(value):
+            raise ValueError(
+                f"Timestamp '{value}' is not an ISO 8601 date-time with UTC offset "
+                f"(expected YYYY-MM-DDThh:mm:ss[.fff](Z|±hh:mm))"
+            )
+        return value
+    if isinstance(value, datetime.datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Timestamp datetimes must be timezone-aware (include a UTC offset)")
+        return value.isoformat()
+    raise TypeError(f"Timestamp values must be ISO 8601 strings or timezone-aware datetimes, got {type(value)}")
+
+
+def _coerce_timestamps(data):
+    """Convert timestamp data (scalar or array-like) to a numpy unicode array."""
+    arr = data if isinstance(data, np.ndarray) else np.asarray(data, dtype=object)
+    if arr.dtype.kind == 'U':
+        return arr
+    out = np.empty(arr.shape, dtype=object)
+    for idx in np.ndindex(arr.shape):
+        out[idx] = to_iso8601_string(arr[idx])
+    return out.astype(str)
+
+
+def resolve_read_only(read_only=None, control=None):
+    """
+    Resolve the ``read_only`` flag from the new ``read_only`` and legacy ``control`` arguments.
+
+    ``read_only`` is the inverse of ``control``. If neither is given, the observable is
+    read-only (a measured/output quantity).
+
+    Raises:
+        TypeError: If a provided value is not a boolean.
+        ValueError: If both are provided and inconsistent.
+    """
+    for name, value in (('read_only', read_only), ('control', control)):
+        if value is not None and not isinstance(value, (bool, np.bool_)):
+            raise TypeError(f"{name} must be a single boolean value, got {type(value)}")
+    if read_only is None and control is None:
+        return True
+    if read_only is None:
+        return not bool(control)
+    if control is not None and bool(read_only) == bool(control):
+        raise ValueError(
+            f"read_only={bool(read_only)} and control={bool(control)} are inconsistent; "
+            f"read_only must equal (not control). Prefer passing only read_only."
+        )
+    return bool(read_only)
 
 # SI prefix factors — defined here for compatibility with beamphysics versions
 # that may not export PREFIX_FACTOR / SHORT_PREFIX_FACTOR.
@@ -143,41 +264,38 @@ _SHORT_PREFIX_FACTOR = getattr(units, 'SHORT_PREFIX_FACTOR', {
 
 def unit_checker(unit):
     """
-    Checks if the provided unit is valid.
+    Checks if the provided unit is valid and splits off any SI prefix.
+
+    The unit string itself is stored as given (e.g. 'mW', 'uW', 'pC'); the multiplier
+    and base unit returned here are only used to validate the unit.
+
     Args:
-        unit (str): Unit string to check.
+        unit (str): Unit string to check. ASCII 'u' is accepted as an alias for 'µ'.
 
     Returns:
-        openpmd_beamphysics.units: Valid unit if recognized, else "Custom_Unit".
+        tuple: (prefix_multiplier, base_unit) where base_unit is an
+        openpmd_beamphysics unit if recognized, else "Custom Unit"
+        (with multiplier 1.0).
+
+    Raises:
+        ValueError: If unit is not a string.
     """
-    valid_unit = "Custom Unit"
-    prefix = 1
     if not isinstance(unit, str):
         raise ValueError("unit must be a string, received type: {}".format(type(unit)))
-    
-    # Handle ASCII 'u' as alias for micro 'µ' (common in many contexts where Unicode is problematic)
-    if unit.startswith('u') and len(unit) > 1:
-        # Check if 'u' followed by a known unit (e.g., 'um', 'us', 'uA')
-        base_unit = unit[1:]
-        if base_unit in units.known_unit:
-            valid_unit = units.known_unit[base_unit]
-            prefix = 1e-6  # micro = 1e-6
-            return float(prefix), valid_unit
-    
-    if unit in units.known_unit.keys():
-        valid_unit = units.known_unit[unit]
-        prefix = 1
-    else:
-        # Check for prefix in SI prefix tables
-        for pro in list(_PREFIX_FACTOR.keys()) + list(_SHORT_PREFIX_FACTOR.keys()):
-            if unit.startswith(pro):
-                base_unit = unit[len(pro):]
-                if base_unit in units.known_unit:
-                    valid_unit = units.known_unit[base_unit]
-                    prefix = _PREFIX_FACTOR.get(pro, _SHORT_PREFIX_FACTOR.get(pro, 1))
 
+    if unit in units.known_unit:
+        return 1.0, units.known_unit[unit]
 
-    return float(prefix), valid_unit
+    # Longest prefix first so e.g. 'da' (deca) wins over 'd' (deci).
+    factors = {**_PREFIX_FACTOR, **_SHORT_PREFIX_FACTOR}
+    factors.setdefault('u', 1e-6)
+    for pro in sorted(factors, key=len, reverse=True):
+        if unit.startswith(pro):
+            base_unit = unit[len(pro):]
+            if base_unit and base_unit in units.known_unit:
+                return float(factors[pro]), units.known_unit[base_unit]
+
+    return 1.0, "Custom Unit"
 
 
 # ==============================================
@@ -192,7 +310,8 @@ class SingleObservable:
     - Feature dimensions: 0 (scalar), 1 (waveform), 2 (image), etc.
     - Location/name dimensions: Multiple locations or data fields
 
-    The class validates data structure and handles unit conversion.
+    The constructor coerces inputs (e.g. lists to arrays) and then calls
+    :meth:`checker`, which can also be called on its own at any time.
 
     Attributes
     ----------
@@ -200,22 +319,28 @@ class SingleObservable:
         Tuple of batch dimension sizes. Last dimension is number of shots.
     num_feature_dims : int
         Number of feature dimensions (0=scalar, 1=waveform, 2=image).
-    location : ndarray
-        Physical or logical location(s) in the beamline (1D array).
+    location : ndarray or None
+        Physical or logical location(s) in the beamline (1D array). Optional only
+        for the 'Timestamp' observable.
     data : ndarray
         Observable data array with shape: concatenate(batch_dims, length_dim, feature_dims).
     data_name : str
-        Name of the data field (single string).
+        Name of the data field (single string). For experimental data this should be the
+        full PV (e.g. 'BPMS:IN10:781:TMIT'); 'Timestamp' is reserved for per-shot timestamps.
     location_primary : bool
         If True, data is grouped by location; if False, by data type.
     attrs : dict
         Additional attributes. For non-scalar data (num_feature_dims>0), must include 'bin_size' and 'offset'.
+    read_only : bool
+        True for measured/read-back quantities, False for settable (control/input) parameters.
     control : bool
-        Flag indicating control/input parameter (True) vs measured/output (False).
-    units : str or unit object
-        Physical units with automatic prefix handling.
+        Legacy alias, always equal to ``not read_only``.
+    units : str
+        Units exactly as given, including any SI prefix (e.g. 'mW', 'pC').
+    base_units : unit object or str
+        Base unit found by :func:`unit_checker` ("Custom Unit" if not recognized).
     unit_multiplier : float
-        Multiplier for unit prefix conversion.
+        SI prefix multiplier found by :func:`unit_checker` (used for validation only).
     num_length_dim : int
         0 if single location, 1 if multiple locations (calculated property).
     length_dim : tuple
@@ -225,14 +350,16 @@ class SingleObservable:
 
     Methods
     -------
-    __init__(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_primary, control)
+    __init__(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary, control, read_only)
         Initialize a SingleObservable instance with data and metadata.
+    checker()
+        Validates the full observable (standalone).
     data_dim_checker()
         Validates that data array dimensions match the specified structure.
     to_dict()
         Returns a dictionary representation of the observable (for control parameters).
     """
-    def __init__(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=False):
+    def __init__(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=None, read_only=None):
         """
         Initialize a SingleObservable instance.
         Args:
@@ -242,14 +369,14 @@ class SingleObservable:
             data: Observable data array.
             attrs (dict): Additional attributes.
             data_name (str): Name of the data field.
-            units: Physical units.
-            location_units (str): Physical units for location data. Default None.
+            units (str): Physical units, stored as given (SI prefixes allowed).
+            location_units (str): Physical units for location data. Required when location_primary is False.
             location_primary (bool): Group by location if True.
-            control (bool): True for control/input, False for measured/output.
+            control (bool): Legacy flag, True for control/input. Equivalent to read_only=not control.
+            read_only (bool): True for measured/read-back values (default), False for settable inputs.
         Raises:
             TypeError, ValueError: For invalid types or mismatched data.
         """
-        # Validate and convert batch_dims to tuple
         if batch_dims is None:
             batch_dims = ()
         elif isinstance(batch_dims, int):
@@ -258,65 +385,62 @@ class SingleObservable:
             raise TypeError(f"batch_dims must be a list or tuple, got {type(batch_dims)}")
         else:
             batch_dims = tuple(batch_dims)
-            if not all(isinstance(d, (int, np.integer)) and d > 0 for d in batch_dims):
-                raise ValueError("All batch_dims values must be positive integers")
-        
+
         if location is not None and not (
             isinstance(location, (str, int, float, list, np.ndarray))
         ):
             raise TypeError("location must be a string, number, list, or np.ndarray")
         if isinstance(location, (str, int, float)):
             location = np.array([location])
-
-        # Validate location format
-        if isinstance(location, np.ndarray):
-            if location.ndim != 1:
-                raise ValueError(f"location as ndarray must be 1-D, got {location.ndim}-D array")
         elif isinstance(location, list):
             if not all(isinstance(item, (str, int, float)) for item in location):
                 raise ValueError("location as list must contain only str, int, or float values (no nested lists)")
             location = np.array(location)
 
-        if not isinstance(location_primary, bool):
-            raise ValueError("location_primary must be a boolean value")
-        
-        # Validate control is a single bool
-        if not isinstance(control, bool):
-            raise TypeError(f"control must be a single boolean value, got {type(control)}")
-        
-        # Validate data_name format - must be a single string
-        if data_name is not None:
-            if isinstance(data_name, (list, np.ndarray)):
-                if len(data_name) == 0:
-                    raise ValueError("data_name cannot be an empty list")
-                elif len(data_name) == 1:
-                    # Coerce single-element list to string
-                    data_name = str(data_name[0])
-                else:
-                    raise ValueError(f"data_name must be a single string, got list of length {len(data_name)}")
-            elif not isinstance(data_name, str):
-                raise TypeError(f"data_name must be a string, got {type(data_name)}")
-        
-        # Validate and coerce data to np.array
-        if data is not None:
-            if not isinstance(data, np.ndarray):
-                try:
-                    data = np.array(data)
-                except Exception as e:
-                    raise TypeError(f"data must be convertible to np.ndarray, got type {type(data)}. Error: {e}")
-        
-        # Check if data contains ParticleGroup objects
-        if data is not None and data.size > 0:
+        if data_name is not None and isinstance(data_name, (list, np.ndarray)):
+            if len(data_name) == 0:
+                raise ValueError("data_name cannot be an empty list")
+            elif len(data_name) == 1:
+                data_name = str(data_name[0])
+            else:
+                raise ValueError(f"data_name must be a single string, got list of length {len(data_name)}")
+
+        is_timestamp = data_name == TIMESTAMP_NAME
+        if is_timestamp:
+            if units is None:
+                units = ""
+            if data is not None:
+                data = _coerce_timestamps(data)
+
+        if data is not None and not isinstance(data, np.ndarray):
+            try:
+                data = np.array(data)
+            except Exception as e:
+                raise TypeError(f"data must be convertible to np.ndarray, got type {type(data)}. Error: {e}")
+
+        # ParticleGroup data: all elements must be ParticleGroups and num_feature_dims is 0
+        if data is not None and data.size > 0 and data.dtype == object:
             flat_data = data.flatten()
-            has_particlegroup = any(isinstance(item, ParticleGroup) for item in flat_data)
-            
-            if has_particlegroup:
-                # If any element is a ParticleGroup, all must be ParticleGroup
+            if any(isinstance(item, ParticleGroup) for item in flat_data):
                 if not all(isinstance(item, ParticleGroup) for item in flat_data):
-                    raise TypeError(f"If any element of data is a ParticleGroup, all elements must be ParticleGroup")
-                
-                # If all are ParticleGroup, set num_feature_dims to 0
+                    raise TypeError("If any element of data is a ParticleGroup, all elements must be ParticleGroup")
                 num_feature_dims = 0
+
+        if isinstance(num_feature_dims, np.integer):
+            num_feature_dims = int(num_feature_dims)
+
+        attrs = dict(attrs) if attrs is not None else {}
+        if isinstance(num_feature_dims, int) and num_feature_dims > 0:
+            if 'bin_size' in attrs and not isinstance(attrs['bin_size'], str):
+                try:
+                    attrs['bin_size'] = float(attrs['bin_size'])
+                except (ValueError, TypeError) as e:
+                    raise TypeError(f"bin_size must be a float or a string key, got {type(attrs['bin_size'])}: {e}")
+            if 'offset' in attrs:
+                try:
+                    attrs['offset'] = float(attrs['offset'])
+                except (ValueError, TypeError) as e:
+                    raise TypeError(f"offset must be convertible to float, got {type(attrs['offset'])}: {e}")
 
         self.batch_dims = batch_dims
         self.num_feature_dims = num_feature_dims
@@ -325,44 +449,129 @@ class SingleObservable:
         self.data_name = data_name
         self.location_primary = location_primary
         self.data = data
-        self.attrs = attrs if attrs is not None else {}
-        self.control = control
-        
-        # Validate bin_size and offset for non-scalar data
+        self.attrs = attrs
+        self.read_only = resolve_read_only(read_only, control)
+
+        prefix, base_units = unit_checker(units)
+        self.units = units
+        self.unit_multiplier = prefix
+        self.base_units = base_units
+
+        self.checker()
+
+    @property
+    def control(self):
+        """Legacy alias: True for control/input parameters, i.e. ``not read_only``."""
+        return not self.read_only
+
+    @control.setter
+    def control(self, value):
+        self.read_only = resolve_read_only(control=value)
+
+    @property
+    def is_timestamp(self):
+        """True if this is the reserved per-shot 'Timestamp' observable."""
+        return self.data_name == TIMESTAMP_NAME
+
+    def entry_names(self):
+        """
+        HDF5 entry names this observable is written as.
+
+        Returns [data_name] for regular data, or one '<data_name>_<i>_<j>...' group name
+        per batch element for ParticleGroup data ('<data_name>_0' for batch_dims=()).
+        """
+        if self.has_particlegroup:
+            names = []
+            for idx in np.ndindex(self.data.shape):
+                idx_str = '0' if len(idx) == 0 else '_'.join(map(str, idx))
+                names.append(f"{self.data_name}_{idx_str}")
+            return names
+        return [self.data_name]
+
+    def checker(self):
+        """
+        Validates this observable. Safe to call standalone at any time; does not modify the object.
+
+        Raises:
+            TypeError, ValueError: If any rule is violated.
+        """
+        if not isinstance(self.batch_dims, tuple) or not all(
+            isinstance(d, (int, np.integer)) and not isinstance(d, (bool, np.bool_)) and d > 0
+            for d in self.batch_dims
+        ):
+            raise ValueError("All batch_dims values must be positive integers")
+
+        if isinstance(self.num_feature_dims, (bool, np.bool_)) or not isinstance(self.num_feature_dims, (int, np.integer)) or self.num_feature_dims < 0:
+            raise ValueError(f"num_feature_dims must be a non-negative integer, got {self.num_feature_dims!r}")
+
+        if not isinstance(self.data_name, str):
+            raise TypeError(f"data_name must be a string, got {type(self.data_name)}")
+        if self.data_name == "":
+            raise ValueError("data_name must not be empty")
+        if '/' in self.data_name:
+            raise ValueError(f"data_name must not contain '/', got '{self.data_name}'")
+
+        if not isinstance(self.location_primary, bool):
+            raise ValueError("location_primary must be a boolean value")
+        if not isinstance(self.read_only, bool):
+            raise TypeError(f"read_only must be a single boolean value, got {type(self.read_only)}")
+
+        if self.location is None:
+            if not self.is_timestamp:
+                raise ValueError(f"location is required for observable '{self.data_name}'")
+        else:
+            if not isinstance(self.location, np.ndarray) or self.location.ndim != 1:
+                raise ValueError("location must be a 1-D array of str, int, or float values")
+            if len(self.location) == 0:
+                raise ValueError("location must not be empty")
+            if self.location_primary:
+                if len(self.location) != 1:
+                    raise ValueError(f"When location_primary is True, location must have exactly 1 element, got {len(self.location)}")
+                if '/' in str(self.location[0]) or str(self.location[0]) == "":
+                    raise ValueError(f"location must be a non-empty name without '/', got '{self.location[0]}'")
+        if not self.location_primary:
+            if not isinstance(self.location_units, str) or self.location_units == "":
+                raise ValueError(f"location_units must be specified when location_primary is False (observable '{self.data_name}')")
+
+        if not isinstance(self.units, str):
+            raise ValueError("unit must be a string, received type: {}".format(type(self.units)))
+
         if self.num_feature_dims > 0:
             if 'bin_size' not in self.attrs:
                 raise ValueError(f"For non-scalar data (num_feature_dims={self.num_feature_dims}), 'bin_size' must be specified in attrs")
             if 'offset' not in self.attrs:
                 raise ValueError(f"For non-scalar data (num_feature_dims={self.num_feature_dims}), 'offset' must be specified in attrs")
-            
             # bin_size may be a float, or a string naming another observable (key) whose
             # data has dimension batch_dims (per-shot bin sizes); validated in observable_checker.
             if isinstance(self.attrs['bin_size'], str):
                 if len(self.batch_dims) == 0:
                     raise ValueError("bin_size may only be a string key when batch_dims is non-empty; use a float for single-shot data")
-            else:
-                try:
-                    self.attrs['bin_size'] = float(self.attrs['bin_size'])
-                except (ValueError, TypeError) as e:
-                    raise TypeError(f"bin_size must be a float or a string key, got {type(self.attrs['bin_size'])}: {e}")
-            
-            try:
-                self.attrs['offset'] = float(self.attrs['offset'])
-            except (ValueError, TypeError) as e:
-                raise TypeError(f"offset must be convertible to float, got {type(self.attrs['offset'])}: {e}")
-            
-            # bin_size must be a float or a string key; offset must be a float
-            assert isinstance(self.attrs['bin_size'], (float, str)), f"bin_size must be float or str, got {type(self.attrs['bin_size'])}"
-            assert isinstance(self.attrs['offset'], float), f"offset must be float, got {type(self.attrs['offset'])}"
+            elif not isinstance(self.attrs['bin_size'], float):
+                raise TypeError(f"bin_size must be a float or a string key, got {type(self.attrs['bin_size'])}")
+            if not isinstance(self.attrs['offset'], float):
+                raise TypeError(f"offset must be a float, got {type(self.attrs['offset'])}")
 
-        if self.location_primary:
-            if len(location) != 1:
-                raise ValueError(f"When location_primary is True, location must have exactly 1 element, got {len(location)}")
-        
-        prefix, valid_units = unit_checker(units)
-        self.unit_multiplier = prefix
-        self.units = units if valid_units == "Custom Unit" else valid_units
-        
+        if self.is_timestamp:
+            if self.num_feature_dims != 0:
+                raise ValueError("Timestamp observable must have num_feature_dims=0")
+            if not self.read_only:
+                raise ValueError("Timestamp observable must be read_only")
+            if not self.location_primary:
+                raise ValueError("Timestamp observable must have location_primary=True")
+            if self.data is not None:
+                if self.data.dtype.kind != 'U':
+                    raise TypeError(f"Timestamp data must be ISO 8601 strings, got dtype {self.data.dtype}")
+                for value in self.data.ravel():
+                    if not is_iso8601_timestamp(value):
+                        raise ValueError(
+                            f"Timestamp '{value}' is not an ISO 8601 date-time with UTC offset "
+                            f"(expected YYYY-MM-DDThh:mm:ss[.fff](Z|±hh:mm))"
+                        )
+        elif self.data is not None and not self.has_particlegroup and self.data.dtype.kind not in 'biufc':
+            raise TypeError(
+                f"data for observable '{self.data_name}' must be numeric (or ParticleGroup objects), got dtype {self.data.dtype}"
+            )
+
         if self.data is not None:
             self.data_dim_checker()
 
@@ -390,7 +599,7 @@ class SingleObservable:
     
     @property
     def units_str(self):
-        """String representation of units for serialization."""
+        """Units string for serialization, exactly as given (including any SI prefix)."""
         if isinstance(self.units, str):
             return self.units
         return getattr(self.units, "unitSymbol", str(self.units))
@@ -398,7 +607,7 @@ class SingleObservable:
     @property
     def has_particlegroup(self):
         """Check if data contains ParticleGroup objects."""
-        if self.data is None or self.data.size == 0:
+        if self.data is None or self.data.size == 0 or self.data.dtype != object:
             return False
         flat_data = self.data.flatten()
         return any(isinstance(item, ParticleGroup) for item in flat_data)
@@ -441,17 +650,12 @@ class SingleObservable:
         Returns:
             dict: Dictionary with input attributes.
         """
-        # Ensure units is always a string for JSON serialization
-        if isinstance(self.units, str):
-            units_str = self.units
-        else:
-            units_str = getattr(self.units, "unitSymbol", str(self.units))
         if self.control:
             return {
                 "name": self.data_name,
                 "value": self.data,
                 "location": self.location,
-                "units": units_str,
+                "units": self.units_str,
         }
         else:
             return {}
@@ -598,10 +802,12 @@ class Observables(list):
     -------
     __init__(observable_list)
         Initialize Observables instance from a list.
-    add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_primary, control)
+    add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary, control, read_only)
         Adds an observable to the list.
+    layout()
+        Returns where each observable is stored under observables/ in HDF5.
     observable_checker(allow_blank)
-        Validates all observables in the list.
+        Validates all observables in the list (standalone).
     """
     def __init__(self, observable_list=None):
         """
@@ -615,7 +821,7 @@ class Observables(list):
         for observable in observable_list:
             self.add_observable(observable["location"], observable["datum"], observable["control"], observable["num_shots"], observable["units"], observable.get("attrs"), observable.get("datum_name", ""),observable.get("location_primary", True))
 
-    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=False):
+    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=None, read_only=None):
         """
         Adds an observable to the Observables list.
         Args:
@@ -625,10 +831,11 @@ class Observables(list):
             data: Observable data array.
             attrs (dict): Additional attributes.
             data_name (str): Name of the data field.
-            units: Physical units.
+            units (str): Physical units, stored as given (SI prefixes allowed).
             location_units (str): Physical units for location data. Default None.
             location_primary (bool): Group by location if True.
-            control (bool): True for control/input, False for measured/output.
+            control (bool): Legacy flag, True for control/input (= not read_only).
+            read_only (bool): True for measured/read-back values (default), False for settable inputs.
         """
         output = SingleObservable(
             batch_dims=batch_dims,
@@ -640,23 +847,110 @@ class Observables(list):
             units=units,
             location_units=location_units,
             location_primary=location_primary,
-            control=control
+            control=control,
+            read_only=read_only,
         )
         self.append(output)
         self.observable_checker(allow_blank=True)
 
+    def layout(self):
+        """
+        Determine where each observable is stored under ``observables/`` in HDF5.
+
+        - ``location_primary=False`` -> ``multi_location_data``
+        - a location holding exactly one observable (or a Timestamp without location)
+          -> top level ('' parent), with the location kept in the ``@location`` attribute
+        - a location holding several observables -> a group named after the location
+
+        Returns:
+            list of (SingleObservable, parent) tuples, parent being '' (top level),
+            a location name, or MULTI_LOCATION_GROUP.
+        """
+        counts = {}
+        for obs in self:
+            if obs.location_primary and obs.location is not None:
+                key = str(obs.location[0])
+                counts[key] = counts.get(key, 0) + 1
+        result = []
+        for obs in self:
+            if not obs.location_primary:
+                parent = MULTI_LOCATION_GROUP
+            elif obs.location is None or counts[str(obs.location[0])] == 1:
+                parent = ""
+            else:
+                parent = str(obs.location[0])
+            result.append((obs, parent))
+        return result
+
+    def _layout_checker(self):
+        """Raise ValueError if any two observables would map to the same HDF5 path."""
+        top_level = {}
+        groups = {}
+        for obs, parent in self.layout():
+            for name in obs.entry_names():
+                if parent == "":
+                    if name in top_level:
+                        raise ValueError(
+                            f"Observable '{obs.data_name}' would be stored as observables/{name}, "
+                            f"which is already used by '{top_level[name]}'. Use unique (full PV) data_names."
+                        )
+                    top_level[name] = obs.data_name
+                else:
+                    names = groups.setdefault(parent, set())
+                    if parent == MULTI_LOCATION_GROUP and name == DATA_LOCATIONS_NAME:
+                        raise ValueError(f"'{DATA_LOCATIONS_NAME}' is reserved in {MULTI_LOCATION_GROUP}")
+                    if name in names:
+                        raise ValueError(f"Duplicate observable '{name}' in observables/{parent}")
+                    names.add(name)
+        location_parents = {p for obs, p in self.layout() if p not in ("", MULTI_LOCATION_GROUP)}
+        if MULTI_LOCATION_GROUP in location_parents:
+            raise ValueError(f"'{MULTI_LOCATION_GROUP}' is reserved and cannot be used as a location name")
+        for parent in groups:
+            if parent in top_level:
+                raise ValueError(
+                    f"observables/{parent} would be both a group and the observable '{top_level[parent]}'. "
+                    f"Use unique (full PV) data_names."
+                )
+
+    def _multi_location_checker(self):
+        """All multi_location_data observables must share locations, location_units and num_feature_dims."""
+        multi = [obs for obs in self if not obs.location_primary]
+        if not multi:
+            return
+        first = multi[0]
+        for obs in multi[1:]:
+            a, b = np.asarray(first.location), np.asarray(obs.location)
+            same = a.shape == b.shape and (
+                np.array_equal(a, b) if a.dtype.kind == b.dtype.kind else np.array_equal(a.astype(str), b.astype(str))
+            )
+            if not same:
+                raise ValueError(
+                    f"All observables in multi_location_data must have same location. "
+                    f"Found {obs.location} for '{obs.data_name}' but expected {first.location}"
+                )
+            if obs.num_feature_dims != first.num_feature_dims:
+                raise ValueError(
+                    f"All observables in multi_location_data must have same num_feature_dims. "
+                    f"Found {obs.num_feature_dims} for '{obs.data_name}' but expected {first.num_feature_dims}"
+                )
+            if obs.location_units != first.location_units:
+                raise ValueError(
+                    f"All observables in multi_location_data must have same location_units. "
+                    f"Found '{obs.location_units}' for '{obs.data_name}' but expected '{first.location_units}'"
+                )
+
     def observable_checker(self,allow_blank = False):
         """
-        Validates observables in the Observables list.
+        Validates observables in the Observables list. Safe to call standalone.
         Args:
-            allow_blank (bool): If True, allows blank outputs.
+            allow_blank (bool): If True, allows blank outputs and performs only the
+                incremental checks used while observables are being added.
         Raises:
             TypeError, ValueError, AssertionError: For invalid types or mismatched data.
         """
         if allow_blank and len(self) == 0:
             return
-        
-        # Check that all observables have the same batch_dims
+
         if len(self) > 0:
             first_batch_dims = self[0].batch_dims
             for i, observable in enumerate(self):
@@ -666,29 +960,42 @@ class Observables(list):
                         f"Observable at index 0 has batch_dims={first_batch_dims}, "
                         f"but observable at index {i} has batch_dims={observable.batch_dims}"
                     )
-        
-        # On the strict (final) check, validate string bin_size references: the string
-        # must name another observable (key) whose data shape equals batch_dims.
-        if not allow_blank:
+
+        n_timestamps = sum(1 for obs in self if obs.is_timestamp)
+        if n_timestamps > 1:
+            raise ValueError(f"At most one '{TIMESTAMP_NAME}' observable is allowed, found {n_timestamps}")
+
+        if allow_blank:
             for observable in self:
-                if observable.num_feature_dims > 0 and isinstance(observable.attrs.get('bin_size'), str):
-                    key = observable.attrs['bin_size']
-                    target = tuple(observable.batch_dims)
-                    matches = [obs for obs in self if obs.data_name == key]
-                    if not matches:
-                        raise ValueError(
-                            f"bin_size='{key}' for observable '{observable.data_name}' "
-                            f"must match the data_name of another observable (key)"
-                        )
-                    if not any(obs.data is not None and tuple(np.shape(obs.data)) == target for obs in matches):
-                        shapes = [None if obs.data is None else tuple(np.shape(obs.data)) for obs in matches]
-                        raise ValueError(
-                            f"bin_size key '{key}' must reference data with dimension "
-                            f"batch_dims={target}, got shape(s) {shapes}"
-                        )
+                if observable.data is not None:
+                    observable.data_dim_checker()
+            return
 
         for observable in self:
-            observable.data_dim_checker()
+            observable.checker()
+            if observable.data is None:
+                raise ValueError(f"Observable '{observable.data_name}' has no data")
+
+        self._multi_location_checker()
+        self._layout_checker()
+
+        # String bin_size references must name another observable (key) whose data shape equals batch_dims.
+        for observable in self:
+            if observable.num_feature_dims > 0 and isinstance(observable.attrs.get('bin_size'), str):
+                key = observable.attrs['bin_size']
+                target = tuple(observable.batch_dims)
+                matches = [obs for obs in self if obs.data_name == key]
+                if not matches:
+                    raise ValueError(
+                        f"bin_size='{key}' for observable '{observable.data_name}' "
+                        f"must match the data_name of another observable (key)"
+                    )
+                if not any(obs.data is not None and tuple(np.shape(obs.data)) == target for obs in matches):
+                    shapes = [None if obs.data is None else tuple(np.shape(obs.data)) for obs in matches]
+                    raise ValueError(
+                        f"bin_size key '{key}' must reference data with dimension "
+                        f"batch_dims={target}, got shape(s) {shapes}"
+                    )
 
 # ==============================================
 # Summary: Fast data point querying
@@ -817,8 +1124,10 @@ class DataPoint2:
         Adds lattice information to the data point.
     add_run_information(source, date, notes)
         Adds run metadata to the data point.
-    add_observable(batch_dims, feature_dims, shots_per_batch, location, data, attrs, data_names, units, location_primary, control)
+    add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary, control, read_only)
         Adds an observable measurement or output to the data point.
+    add_timestamp(data, batch_dims, location)
+        Adds the optional per-shot 'Timestamp' observable (ISO 8601 strings).
     add_summary(summary_keys, summary_location)
         Specifies keys to include in summary for fast querying.
     get_summary()
@@ -884,7 +1193,9 @@ class DataPoint2:
             # Hash the actual data
             if obs.data is not None and obs.data.size > 0:
                 # Skip ParticleGroup objects
-                if obs.data.dtype != object:
+                if obs.data.dtype.kind in 'US':
+                    hasher.update("\x1f".join(str(v) for v in obs.data.ravel()).encode('utf-8'))
+                elif obs.data.dtype != object:
                     # Convert to float64 and create bytes representation
                     data_float = np.asarray(obs.data, dtype=np.float64)
                     # Round to fixed precision
@@ -937,7 +1248,7 @@ class DataPoint2:
         self.run_information.add_run_information(source, date, notes)
         return self
 
-    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=False):
+    def add_observable(self, batch_dims=None, num_feature_dims=0, location=None, data=None, attrs=None, data_name=None, units=None, location_units=None, location_primary=True, control=None, read_only=None):
         """
         Adds an observable to the data point.
         Args:
@@ -947,16 +1258,40 @@ class DataPoint2:
             data: Observable data array.
             attrs (dict): Additional attributes. REQUIRED to include 'bin_size' and 'offset'
                          when num_feature_dims > 0. Example: {'bin_size': 1e-6, 'offset': 0.0}
-            data_name (str): Name of the data field.
-            units: Physical units.
-            location_units (str): Physical units for location data. Default None.
+            data_name (str): Name of the data field. Use the full PV for experimental data
+                (e.g. 'BPMS:IN10:781:TMIT') and the full parameter name for simulations.
+            units (str): Physical units, stored as given including SI prefix (e.g. 'mW').
+            location_units (str): Physical units for location data. Required when location_primary is False.
             location_primary (bool): Group by location if True.
-            control (bool): True for control/input, False for measured/output.
+            control (bool): Legacy flag, True for control/input. Equivalent to read_only=not control.
+            read_only (bool): True for measured/read-back values (default), False for settable inputs.
         Returns:
             self: The DataPoint2 instance.
         """
-        self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary=location_primary, control=control)
+        self.observables.add_observable(batch_dims, num_feature_dims, location, data, attrs, data_name, units, location_units, location_primary=location_primary, control=control, read_only=read_only)
         
+        return self
+
+    def add_timestamp(self, data, batch_dims=None, location=None):
+        """
+        Adds the optional per-shot 'Timestamp' observable.
+
+        Args:
+            data: ISO 8601 date-time string(s) with UTC offset (e.g. '2026-10-16T13:55:40.050-07:00')
+                or timezone-aware datetime objects, with shape batch_dims.
+            batch_dims (tuple): Batch dimensions. Defaults to those of existing observables,
+                otherwise to the shape of ``data``.
+            location: Optional location; if omitted, the timestamp is stored at observables/Timestamp
+                without an @location attribute.
+        Returns:
+            self: The DataPoint2 instance.
+        """
+        if batch_dims is None:
+            batch_dims = self.observables[0].batch_dims if len(self.observables) > 0 else np.shape(data)
+        self.observables.add_observable(
+            batch_dims=batch_dims, num_feature_dims=0, location=location, data=data,
+            data_name=TIMESTAMP_NAME, units="", location_primary=True, read_only=True,
+        )
         return self
 
 
@@ -1041,15 +1376,20 @@ class DataPoint2:
             simulation_input_file_0, _1, ... (datasets, if SimulatedDataPoint2 with non-scalar batch)
         
         /observables/
-            <location_name>/ (group, if location_primary=True)
+            <data_name> (dataset, if it is the only observable at its location)
+                Attributes: location, read_only, units, num_feature_dims, bin_size/offset
+            <data_name>_<i>_<j>_... (group, ParticleGroup that is the only observable at its location)
+                Attributes: location
+            <location_name>/ (group, if several location_primary observables share the location)
                 <data_name> (dataset): Observable data
-                    Attributes: location, control, units, num_feature_dims, custom attrs
+                    Attributes: location, read_only, units, num_feature_dims, bin_size/offset
                 <data_name>_<i>_<j>_... (group): ParticleGroup data matching batch_dims indices
+                    Attributes: location
             multi_location_data/ (group, if location_primary=False)
                 DATA_LOCATIONS (dataset): Location data for all datasets in this group
                     Attributes: units (location units), num_feature_dims
                 <data_name> (dataset): Observable data array
-                    Attributes: control, units, num_feature_dims, custom attrs
+                    Attributes: read_only, units, num_feature_dims, bin_size/offset
                 <data_name>_<i>_<j>_... (group): ParticleGroup data matching batch_dims indices
         
         Root Attributes:
@@ -1104,133 +1444,23 @@ class DataPoint2:
             # Save observables
             # ==========================================
             observables_grp = f.create_group("observables")
-            
-            # Collect observables by location_primary for validation
-            multi_loc_observables = [obs for obs in self.observables if not obs.location_primary]
-            
-            # Validate that all multi_location_data observables have same num_feature_dims
-            if multi_loc_observables:
-                first_num_feature_dims = multi_loc_observables[0].num_feature_dims
-                for obs in multi_loc_observables:
-                    if obs.num_feature_dims != first_num_feature_dims:
-                        raise ValueError(
-                            f"All observables in multi_location_data must have same num_feature_dims. "
-                            f"Found {obs.num_feature_dims} for '{obs.data_name}' but expected {first_num_feature_dims}"
-                        )
-            
-            for i, observable in enumerate(self.observables):
-
-                if observable.location_primary == False:
-                    # Create or get the "multi_location_data" group
-                    if "multi_location_data" not in observables_grp:
-                        multi_loc_grp = observables_grp.create_group("multi_location_data")
-                        
-                        # Create DATA_LOCATIONS dataset on first observable
-                        location_value = observable.location if isinstance(observable.location, np.ndarray) else np.array(observable.location)
-                        # Handle string arrays for HDF5
-                        if location_value.dtype.kind in ['U', 'O']:  # Unicode or Object dtype
-                            loc_dataset = multi_loc_grp.create_dataset("DATA_LOCATIONS", data=location_value.astype('S'))
-                        else:
-                            loc_dataset = multi_loc_grp.create_dataset("DATA_LOCATIONS", data=location_value)
+            for observable, parent in self.observables.layout():
+                if parent == "":
+                    target_grp = observables_grp
+                elif parent == MULTI_LOCATION_GROUP:
+                    if MULTI_LOCATION_GROUP not in observables_grp:
+                        target_grp = observables_grp.create_group(MULTI_LOCATION_GROUP)
+                        location_value = np.asarray(observable.location)
+                        if location_value.dtype.kind in ['U', 'O']:
+                            location_value = location_value.astype('S')
+                        loc_dataset = target_grp.create_dataset(DATA_LOCATIONS_NAME, data=location_value)
                         loc_dataset.attrs["units"] = observable.location_units
-                        loc_dataset.attrs["num_feature_dims"] = observable.num_feature_dims
+                        loc_dataset.attrs["num_feature_dims"] = 0
                     else:
-                        multi_loc_grp = observables_grp["multi_location_data"]
-                        
-                        # Verify location consistency
-                        existing_location = multi_loc_grp["DATA_LOCATIONS"][:]
-                        current_location = observable.location if isinstance(observable.location, np.ndarray) else np.array(observable.location)
-                        # Handle string comparison
-                        if existing_location.dtype.kind == 'S':
-                            existing_location = existing_location.astype('U')
-                        if current_location.dtype.kind in ['U', 'O']:
-                            current_location = current_location.astype('S').astype('U')
-                        if not np.array_equal(existing_location, current_location):
-                            raise ValueError(
-                                f"All observables in multi_location_data must have same location. "
-                                f"Found {current_location} for '{observable.data_name}' but expected {existing_location}"
-                            )
-
-                    # Handle ParticleGroup objects specially
-                    if observable.has_particlegroup:
-                        # Write each ParticleGroup to its own HDF5 group with index-based naming
-                        for idx in np.ndindex(observable.data.shape):
-                            pg = observable.data[idx]
-                            # Create path using indices: name_i_j_k for batch_dims
-                            # For 0-D arrays (batch_dims=()), idx is (), so use '0' as the index
-                            if len(idx) == 0:
-                                idx_str = '0'
-                            else:
-                                idx_str = '_'.join(map(str, idx))
-                            path = observable.data_name + '_' + idx_str
-                            pg_grp = multi_loc_grp.create_group(path)
-                            pg.write(pg_grp)
-                        # Note: No dataset needed - ParticleGroups are directly accessible by index
-                        # Skip attribute setting for ParticleGroups as they don't have a dataset
-                        continue
-                    else:
-                        # Regular numeric data
-                        out_grp = multi_loc_grp.create_dataset(observable.data_name, data=np.array(observable.data))
-
-                    # Set dataset attributes (no location here - it's in DATA_LOCATIONS)
-                    out_grp.attrs["control"] = observable.control
-                    out_grp.attrs["num_feature_dims"] = observable.num_feature_dims
-                    out_grp.attrs["units"] = observable.units_str
-                    out_grp.attrs["unit_multiplier"] = observable.unit_multiplier
-                    
-                    # Save bin_size and offset when num_feature_dims > 0
-                    if observable.num_feature_dims > 0:
-                        out_grp.attrs["bin_size"] = observable.attrs['bin_size']
-                        out_grp.attrs["offset"] = observable.attrs['offset']
-
-                # --- Handle location_primary=True: Group by location ---
+                        target_grp = observables_grp[MULTI_LOCATION_GROUP]
                 else:
-                    # Validate location structure
-                    assert isinstance(observable.location, (list, np.ndarray)), "observable.location must be a list or np array when location_primary is True, got {}".format(type(observable.location))
-                    assert len(observable.location) == 1, "observable.location must have length 1 when location_primary is True, got length {}".format(len(observable.location))
-                    
-                    # Create group for this location
-                    location_str = str(observable.location[0])
-                    if location_str not in observables_grp:
-                        out_grp = observables_grp.create_group(location_str)
-                    else:
-                        out_grp = observables_grp[location_str]
-
-                    # Handle ParticleGroup data
-                    if observable.has_particlegroup:
-                        # Write each ParticleGroup to its own HDF5 group with index-based naming
-                        for idx in np.ndindex(observable.data.shape):
-                            pg = observable.data[idx]
-                            # Create path using indices: name_i_j_k for batch_dims
-                            # For 0-D arrays (batch_dims=()), idx is (), so use '0' as the index
-                            if len(idx) == 0:
-                                idx_str = '0'
-                            else:
-                                idx_str = '_'.join(map(str, idx))
-                            path = observable.data_name + '_' + idx_str
-                            pg_grp = out_grp.create_group(path)
-                            pg.write(pg_grp)
-                        # Note: No dataset needed - ParticleGroups are directly accessible by index
-                        # Skip attribute setting for ParticleGroups as they don't have a dataset
-                        continue
-                    else:
-                        dataset = out_grp.create_dataset(observable.data_name, data=np.array(observable.data))
-                    
-                    # Set dataset attributes
-                    dataset.attrs["location"] = location_str
-                    dataset.attrs["control"] = observable.control
-                    dataset.attrs["num_feature_dims"] = observable.num_feature_dims
-                    dataset.attrs["units"] = observable.units_str
-                    dataset.attrs["unit_multiplier"] = observable.unit_multiplier
-                    
-                    # Save bin_size and offset when num_feature_dims > 0
-                    if observable.num_feature_dims > 0:
-                        dataset.attrs["bin_size"] = observable.attrs['bin_size']
-                        dataset.attrs["offset"] = observable.attrs['offset']
-                    
-                    # Assert that location in metadata matches group name
-                    assert dataset.attrs["location"] == location_str, \
-                        f"Location mismatch: group name is '{location_str}' but metadata has '{dataset.attrs['location']}'"
+                    target_grp = observables_grp.require_group(parent)
+                _write_observable(target_grp, observable)
 
             # Save simulation input file if this is a SimulatedDataPoint2
             if hasattr(self, "simulation_metadata") and isinstance(self.simulation_metadata, SimulationMetadata):
@@ -1279,6 +1509,41 @@ class DataPoint2:
                     f.attrs[key] = value
                 else:
                     f.attrs[key] = str(value)
+
+def _write_observable(grp, observable):
+    """
+    Write one observable into ``grp`` (observables/, a location group, or multi_location_data).
+
+    Location-primary observables always get an ``@location`` attribute, on datasets and on
+    each ParticleGroup group, regardless of whether they are nested in a location group.
+    """
+    location = None
+    if observable.location_primary and observable.location is not None:
+        location = str(observable.location[0])
+
+    if observable.has_particlegroup:
+        for idx, name in zip(np.ndindex(observable.data.shape), observable.entry_names()):
+            pg_grp = grp.create_group(name)
+            observable.data[idx].write(pg_grp)
+            if location is not None:
+                pg_grp.attrs["location"] = location
+        return
+
+    data = np.asarray(observable.data)
+    if data.dtype.kind == 'U':
+        dataset = grp.create_dataset(observable.data_name, data=data.astype(object), dtype=h5py.string_dtype('utf-8'))
+    else:
+        dataset = grp.create_dataset(observable.data_name, data=data)
+
+    if location is not None:
+        dataset.attrs["location"] = location
+    dataset.attrs["read_only"] = observable.read_only
+    dataset.attrs["num_feature_dims"] = observable.num_feature_dims
+    dataset.attrs["units"] = observable.units_str
+    if observable.num_feature_dims > 0:
+        dataset.attrs["bin_size"] = observable.attrs['bin_size']
+        dataset.attrs["offset"] = observable.attrs['offset']
+
 
 # ==============================================
 # SimulationMetadata: Simulation-specific data

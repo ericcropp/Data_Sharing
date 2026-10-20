@@ -386,7 +386,7 @@ def add_datapoints(batch_dims,
         initial_particles_data = np.empty(num_pts, dtype=object)
         for i in range(len(I_list)):
             initial_particles_data[i] = I_list[i].particles['initial_particles']
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_name='initial_particles', units='', location_primary=True, control=True)
+    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_name='initial_particles', units='', location_primary=True, read_only=False)
     
     # Mapping from Impact particle key to Data Standard data_name and drift z-position.
     # drift_to_z() centers each ParticleGroup at the exact screen location,
@@ -413,7 +413,7 @@ def add_datapoints(batch_dims,
                     particle_data[i] = P
             # Use data_name above (e.g. "241_particles")
             data_name = PG_DATA_NAMES.get(key, key + "_particles")
-            D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=key, data=particle_data, attrs={}, data_name=data_name, units='', location_primary=True, control=False)
+            D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=key, data=particle_data, attrs={}, data_name=data_name, units='', location_primary=True, read_only=True)
     
     # Add lattice configuration files (rfdata files, YAML templates, etc.)
     D.add_lattice(lattice_location='included', lattice_files=rfdata_contents)
@@ -454,9 +454,9 @@ def add_datapoints(batch_dims,
 
             # Add observable with appropriate units
             if key in output_unit_list:
-                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_units='m', location_primary=False, control=False)
+                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_units='m', location_primary=False, read_only=True)
             else:
-                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units="unitless", location_units='m', location_primary=False, control=False)
+                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units="unitless", location_units='m', location_primary=False, read_only=True)
     
     # Verify consistency across all simulations in the batch
     # Assert all data_dicts have the same keys (all simulations should vary the same parameters)
@@ -472,7 +472,7 @@ def add_datapoints(batch_dims,
     for key in data_dicts[0].keys():
         master_dict[key] = np.array([data_dict[key] for data_dict in data_dicts])
     
-    # Add scalar input parameters as observables with control=True (these are inputs)
+    # Add scalar input parameters as observables with read_only=False (these are inputs)
     scalar_inputs = {}
     for col in master_dict:
         # Determine units based on suffix match with unit_list keys
@@ -484,7 +484,7 @@ def add_datapoints(batch_dims,
         if not units:  # If still None or blank, set default
             units = "unitless"
         scalar_inputs[col] = {
-            "name": col.split(':')[1] if ':' in col else col,  # Use subkey as name if available
+            "name": col,  # Full parameter name (e.g. 'CQ10121:b1_gradient') plays the role of the PV
             "value": master_dict[col],
             "location": col.split(':')[0],  # Use element name as location
             "units": units
@@ -497,8 +497,8 @@ def add_datapoints(batch_dims,
         if len(batch_dims) == 0:
             scalar_data = scalar_data[0]
         
-        # Add as observable with control=True to indicate it's an input parameter
-        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, data_name=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True, control=True)
+        # Add as observable with read_only=False to indicate it's a settable input parameter
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, data_name=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True, read_only=False)
     
     # Save the complete data point to HDF5 file
     os.makedirs(output_dir, exist_ok=True)
@@ -661,7 +661,7 @@ def main():
         
         # Create combined file in output directory
         combined_path = os.path.join(args.output_dir, OUTPUT_FILENAME)
-        actual_combined_path = combine_files(args.output_dir, combined_path)
+        actual_combined_path = combine_files(args.output_dir, combined_path, validate=True)
         
         print(f"Combined file created at {actual_combined_path}")
     

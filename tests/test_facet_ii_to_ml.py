@@ -19,12 +19,14 @@ import h5py
 import numpy as np
 from pathlib import Path
 
+from data_standard.Data_Standard_2 import VERSION
+
 
 PROJECT_ROOT = Path(__file__).parent.parent
 EXAMPLES_DIR = PROJECT_ROOT / "examples"
 # The ML script reads the combined Data Standard file
 DS_OUTPUT_DIR = PROJECT_ROOT / "examples" / "data" / "output" / "FACET-II_Simulation_Example"
-DS_FILE = DS_OUTPUT_DIR / "FACET-II_Simulation_Example_v0.1.1.h5"
+DS_FILE = DS_OUTPUT_DIR / f"FACET-II_Simulation_Example_v{VERSION}.h5"
 
 
 @pytest.fixture

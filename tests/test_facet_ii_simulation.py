@@ -18,6 +18,8 @@ import yaml
 import numpy as np
 from pathlib import Path
 
+from data_standard import validate_file
+
 
 # Get the root directory of the project
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -120,6 +122,12 @@ def test_output_hdf5_structure(temp_output_dir, check_data_available):
         # Verify ID is not empty
         assert len(f.attrs['ID']) > 0, "ID is empty"
 
+    # Every generated file must pass the standalone validator without warnings
+    for h5_file in h5_files:
+        report = validate_file(h5_file)
+        assert report.ok, report.format()
+        assert report.warnings == [], report.format()
+
 
 @pytest.mark.slow
 def test_lattice_data_present(temp_output_dir, check_data_available):
@@ -183,6 +191,7 @@ def test_observables_present(temp_output_dir, check_data_available):
         assert len(obs_grp.keys()) > 0, "No observables found"
         
         # Check for at least one observable with required attributes
+        # (datasets may be at the top level or nested in a location group)
         found_valid_observable = False
         for key in obs_grp.keys():
             item = obs_grp[key]
@@ -256,20 +265,19 @@ def test_data_round_trip(temp_output_dir, check_data_available):
         obs_grp = f['observables']
         
         numeric_dataset_found = False
-        for key in obs_grp.keys():
-            item = obs_grp[key]
-            if isinstance(item, h5py.Group):
-                for subkey in item.keys():
-                    subitem = item[subkey]
-                    if isinstance(subitem, h5py.Dataset):
-                        data = subitem[()]
-                        # Check if it's numeric data (not strings or object refs)
-                        if isinstance(data, np.ndarray) and np.issubdtype(data.dtype, np.number):
-                            numeric_dataset_found = True
-                            # Verify data is not all zeros or NaNs
-                            assert not np.all(data == 0) or data.size == 1, \
-                                f"Dataset {key}/{subkey} contains all zeros"
-                            break
+        datasets = []
+        obs_grp.visititems(lambda name, item: datasets.append((name, item)) if isinstance(item, h5py.Dataset) else None)
+        for name, item in datasets:
+            if name.endswith('DATA_LOCATIONS') or '/electron/' in name:
+                continue
+            data = item[()]
+            # Check if it's numeric data (not strings or object refs)
+            if isinstance(data, np.ndarray) and np.issubdtype(data.dtype, np.number):
+                numeric_dataset_found = True
+                # Verify data is not all zeros or NaNs
+                assert not np.all(data == 0) or data.size == 1, \
+                    f"Dataset {name} contains all zeros"
+                break
         
         assert numeric_dataset_found, "No numeric datasets found in observables"
 

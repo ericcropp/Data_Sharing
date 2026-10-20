@@ -19,7 +19,7 @@ This project defines a **minimal, evolving standard** for storing such data, alo
 - **Batch processing**: Built-in support for multi-dimensional scans.
 - **Metadata tracking**: Lattice, simulation, and run information
 - **HDF5 storage**: Efficient, hierarchical data storage
-- **Validation utilities**: Automatic checking of data dimensions and units
+- **Validation utilities**: Automatic checking of data dimensions and units, plus a standalone validator for in-memory data points and HDF5 files
 - **Combining tools**: Merge multiple batches into unified files that **match the rules of the data standard**
 
 
@@ -107,8 +107,8 @@ D.add_observable(
     location=['ICT1'],
     data=np.array(250.0),  # 0-D array for scalar
     data_name='charge',
-    units='pC',
-    control=False
+    units='pC',      # stored as given, SI prefix included
+    read_only=True   # measured quantity; use read_only=False for settable inputs
 )
 
 # Add a 2D image (e.g., screen image)
@@ -127,9 +127,45 @@ D.add_observable(
 D.add_lattice(lattice_location='https://github.com/slaclab/facet2-lattice')
 D.add_run_information(source='FACET-II', date='2025-01-26', notes='Example run')
 
+# Optional per-shot timestamps (ISO 8601 with UTC offset), shaped like batch_dims
+D.add_timestamp('2025-01-26T13:55:40.050-08:00')
+
 # Finalize and save
 D.saveHDF5('./output/')
 ```
+
+`read_only` replaces the older `control` flag (`read_only = not control`). `control=` is
+still accepted for backward compatibility; passing both with inconsistent values raises
+an error.
+
+For experimental data, use the **full PV** as `data_name` and the lattice element as
+`location` (e.g. `location='BPM10781'`, `data_name='BPMS:IN10:781:TMIT'`). For simulation
+data, the full simulation parameter name (e.g. `'CQ10121:b1_gradient'`) plays the role
+of the PV.
+
+## Validation
+
+Validation runs automatically when a data point is saved, and can also be run on its own:
+
+```python
+from data_standard import validate_datapoint, validate_file
+
+validate_datapoint(D)                 # in-memory; raises DataStandardValidationError on failure
+report = validate_file('Example_v0.1.2.h5')   # single data-point or combined HDF5 file
+print(report.ok, report.errors, report.warnings)
+```
+
+From the command line (exit code 1 if any file is invalid):
+
+```bash
+data-standard-validate file1.h5 file2.h5      # installed console script
+python -m data_standard file1.h5 --strict     # --strict treats warnings as errors
+```
+
+Files written by older versions (e.g. `@control`, `@unit_multiplier`, single observables
+nested in a location group) are still accepted; these legacy constructs are reported as
+warnings. `combine_files(..., validate=True)` validates the combined file before the
+individual input files are deleted.
 
 ## Data Structure
 
@@ -161,13 +197,16 @@ The HDF5 file structure follows this hierarchy:
     ├── @simulation_end                     # Group attribute: (Simulation only) End position
     │
     └── observables/
-        ├── <location_name>/                # Location-grouped storage
-        │   └── <observable_name>           # Dataset: batch_dims + feature_dims
+        ├── <PV>                            # Dataset: the only observable at its location
+        │   ├── @location                   # Dataset attribute: Location name
+        │   └── ...                         # Same attributes as below
+        ├── Timestamp                       # Optional dataset: ISO 8601 strings, shape batch_dims
+        ├── <location_name>/                # Group: location with several observables
+        │   └── <PV>                        # Dataset: batch_dims + feature_dims
         │       ├── @location               # Dataset attribute: Location name
-        │       ├── @control                # Dataset attribute: Boolean: control variable?
+        │       ├── @read_only              # Dataset attribute: Boolean: measured (True) or settable (False)
         │       ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
-        │       ├── @units                  # Dataset attribute: Unit string (e.g., "m", "pC")
-        │       ├── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
+        │       ├── @units                  # Dataset attribute: Unit string incl. prefix (e.g., "mm", "pC")
         │       ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
         │       └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
         │
@@ -177,13 +216,15 @@ The HDF5 file structure follows this hierarchy:
             │   └── @num_feature_dims       # Dataset attribute: Always 0 for locations
             │
             └── <observable_name>           # Dataset: batch_dims + (locations,) + feature_dims
-                ├── @control                # Dataset attribute: Boolean
+                ├── @read_only              # Dataset attribute: Boolean
                 ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
-                ├── @units                  # Dataset attribute: Unit string
-                ├── @unit_multiplier        # Dataset attribute: Prefix multiplier
+                ├── @units                  # Dataset attribute: Unit string incl. prefix
                 ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
                 └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
 ```
+
+ParticleGroups are stored as `<data_name>_<i>[_<j>...]` groups (one per batch element) in the
+same places, each with an `@location` attribute.
 
 ### PV to Lattice Mapping (Experimental Data)
 
@@ -211,7 +252,7 @@ This mapping is stored as a 2xn dataset in the HDF5 file under `/lattice/lattice
 
 ## Examples
 
-Examples are provided in the `examples/` directory. Each example generates output files with the Data Standard version appended to the filename (e.g., `Example_Name_v0.1.1.h5`).
+Examples are provided in the `examples/` directory. Each example generates output files with the Data Standard version appended to the filename (e.g., `Example_Name_v0.1.2.h5`).
 
 ### FACET-II Simulation Data
 Processes Impact-T simulation archives with particle distributions:

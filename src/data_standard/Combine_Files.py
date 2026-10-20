@@ -140,7 +140,7 @@ def compare_lattice_groups(lattice1: h5py.Group, lattice2: h5py.Group, exclude_k
     return True
 
 
-def combine_files(input_dir: str, output_h5: str):
+def combine_files(input_dir: str, output_h5: str, validate: bool = False):
     """
     Combine all HDF5 files in input_dir into a single HDF5 file.
     
@@ -151,6 +151,9 @@ def combine_files(input_dir: str, output_h5: str):
     Args:
         input_dir: Directory containing individual .h5 files to combine
         output_h5: Path to output combined HDF5 file (will be modified to include version)
+        validate: If True, validate the combined file with validate_file() before the
+            individual input files are deleted; raises DataStandardValidationError
+            (keeping the input files) if the combined file is invalid.
     
     Returns:
         str: Actual path of the created combined file (with version appended)
@@ -270,6 +273,12 @@ def combine_files(input_dir: str, output_h5: str):
         
         print(f"Successfully combined {len(ids)} files into {output_h5}")
     
+    if validate:
+        from .validate import validate_file
+        report = validate_file(output_h5)
+        print(report.format())
+        report.raise_if_errors()
+
     # Delete individual input files after successful combination
     for h5_file in h5_files:
         file_path = os.path.join(input_dir, h5_file)

@@ -1,6 +1,6 @@
 # Data Standard Specification
 
-**Version:** 2026-01-26  
+**Version:** 0.1.2 (2026-10-16)  
 **Document Status:** Complete Technical Specification
 
 ---
@@ -22,11 +22,14 @@
   - [Observables Group](#observables-group)
     - [Pattern 1: Location-Primary Storage](#pattern-1-location-primary-storage)
     - [Pattern 2: Multi-Location Storage](#pattern-2-multi-location-storage)
+  - [Timestamp Observable](#timestamp-observable)
   - [ParticleGroup Storage](#particlegroup-storage)
   - [Data Type Requirements](#data-type-requirements)
   - [Dimension Validation](#dimension-validation)
   - [Unit Handling](#unit-handling)
 - [Validation Rules](#validation-rules)
+- [Validating Files](#validating-files)
+- [Changes in 0.1.2](#changes-in-012)
 - [Implementation Notes](#implementation-notes)
 
 ---
@@ -40,12 +43,14 @@ This document defines a standardized format for storing accelerator physics data
 - Support for scalar, vector, and multi-dimensional observables
 - Integration with openPMD-beamphysics ParticleGroup format
 - Flexible location-based or multi-location data organization
-- Comprehensive unit handling with SI prefix support
+- Units validated against OpenPMD units, but stored as written, including SI prefixes (e.g. `mW`, `pC`)
+- Optional per-shot ISO 8601 timestamps
 - Summary metadata for dataset discovery and filtering
 
 **Defining Implementation:**
 - `src/data_standard/Data_Standard_2.py`: Classes that generate intermediate files 
-- `src/data_standard/Combine_Files.py`: Utility for finalizing a single HDF5 file that is compliant with the data standard defined below. Automatically appends the Data Standard version to the output filename (e.g., `filename_v0.1.0.h5`).
+- `src/data_standard/Combine_Files.py`: Utility for finalizing a single HDF5 file that is compliant with the data standard defined below. Automatically appends the Data Standard version to the output filename (e.g., `filename_v0.1.2.h5`).
+- `src/data_standard/validate.py`: Standalone validator for in-memory data points and HDF5 files (see [Validating Files](#validating-files)).
 - Three examples are in `examples/`.  See `README.md` for how to run those examples.
 
 ---
@@ -54,10 +59,15 @@ This document defines a standardized format for storing accelerator physics data
 
 ### 1. Observable-Centric Design
 All physical quantities are stored as **observables** with associated metadata:
-- `data_name`: Unique identifier for the observable
-- `units`: Physical units with prefix support
-- `location`: Where the measurement/simulation occurred
-- `control`: Boolean indicating if this is an input (control) or output parameter
+- `data_name`: Identifier for the observable. For experimental data this is the **full PV**
+  (e.g. `BPMS:IN10:781:TMIT`, not `TMIT`); for simulation data the full simulation parameter
+  name (e.g. `CQ10121:b1_gradient`) plays the role of the PV. `Timestamp` is reserved.
+- `units`: Physical units, stored as written including any SI prefix (e.g. `uW`, `mW`)
+- `location`: Where the measurement/simulation occurred (typically a lattice element name)
+- `read_only`: Boolean; `True` for measured/read-back quantities, `False` for settable
+  (control/input) parameters. Replaces the legacy `control` flag (`read_only = not control`).  
+  The legacy `control` flag is still accepted by the validator, but is converted to `read_only` 
+  with opposite value if written using the tooling shown herein.
 - `batch_dims`: Tuple defining batch structure
 - `num_feature_dims`: Integer count of feature dimensions
 
@@ -69,7 +79,10 @@ Data can have multiple dimension types:
 
 ### 3. Location-Based Organization
 Two storage patterns:
-- **`location_primary=True`**: Data grouped by location (each location is a separate HDF5 group)
+- **`location_primary=True`**: Data grouped by location. A location with several observables
+  is an HDF5 group holding them; a location with exactly one observable is not given a group —
+  the observable is stored directly under `observables/` and its location is recorded in
+  `@location`. Every location-primary entry carries `@location`, whether nested or not.
 - **`location_primary=False`**: Data grouped by type with shared location array
 
 ### 4. ParticleGroup & Data Support
@@ -86,7 +99,9 @@ Two storage patterns:
 
 **Lattice:** Configuration defining the accelerator beamline elements and their properties.  All observables' locations must be specified by this lattice.  
 
-**Observable:** A quantity measured or computed at specific location(s) along the beamline.  Notably, these can be inputs or outputs (specify with control boolean; see below)
+**Observable:** A quantity measured or computed at specific location(s) along the beamline.  Notably, these can be inputs or outputs (specify with the read_only boolean; see below)
+
+**PV (Process Variable):** The control-system name of a single quantity (e.g. the EPICS PV `BPMS:IN10:781:TMIT`). Observables are named by their full PV; for simulations, the full simulation parameter name is used instead.
 
 **Feature dimensions:** Intrinsic dimensions of the data beyond batch and location (e.g., pixels in an image, bins in a spectrum)
 
@@ -124,15 +139,23 @@ The HDF5 file structure for combined files follows this hierarchy:
     ├── @simulation_end                     # Group attribute: (Simulation only) End position
     │
     └── observables/
-        ├── <location_name>/                # Location-grouped storage
-        │   └── <observable_name>           # Dataset: batch_dims + feature_dims
-        │       ├── @location               # Dataset attribute: Location name
-        │       ├── @control                # Dataset attribute: Boolean: control variable?
-        │       ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
-        │       ├── @units                  # Dataset attribute: Unit string (e.g., "m", "pC")
-        │       ├── @unit_multiplier        # Dataset attribute: Prefix multiplier (e.g., 1e-12)
-        │       ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
-        │       └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
+        ├── <PV>                            # Dataset: only observable at its location (flattened)
+        │   ├── @location                   # Dataset attribute: Location name
+        │   └── ...                         # Same attributes as nested datasets below
+        ├── <PV>_<i>[_<j>...]/              # ParticleGroup: only observable at its location
+        │   └── @location                   # Group attribute: Location name
+        ├── Timestamp                       # Optional dataset: ISO 8601 strings, shape batch_dims
+        │
+        ├── <location_name>/                # Group: location holding several observables
+        │   ├── <PV>                        # Dataset: batch_dims + feature_dims
+        │   │   ├── @location               # Dataset attribute: Location name (= group name)
+        │   │   ├── @read_only              # Dataset attribute: Boolean: measured (True) / settable (False)
+        │   │   ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
+        │   │   ├── @units                  # Dataset attribute: Unit string incl. prefix (e.g., "mm", "pC")
+        │   │   ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
+        │   │   └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
+        │   └── <PV>_<i>[_<j>...]/          # ParticleGroup (one per batch element)
+        │       └── @location               # Group attribute: Location name (= group name)
         │
         └── multi_location_data/            # Multi-location storage
             ├── DATA_LOCATIONS              # Dataset: location array
@@ -140,10 +163,9 @@ The HDF5 file structure for combined files follows this hierarchy:
             │   └── @num_feature_dims       # Dataset attribute: Always 0 for locations
             │
             └── <observable_name>           # Dataset: batch_dims + (locations,) + feature_dims
-                ├── @control                # Dataset attribute: Boolean
+                ├── @read_only              # Dataset attribute: Boolean
                 ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
-                ├── @units                  # Dataset attribute: Unit string
-                ├── @unit_multiplier        # Dataset attribute: Prefix multiplier
+                ├── @units                  # Dataset attribute: Unit string incl. prefix
                 ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
                 └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
 ```
@@ -218,14 +240,11 @@ The HDF5 file structure for combined files follows this hierarchy:
 
 #### @ID
 - **Type:** String
-- **Format:** `<DataType>_<8-char-hash>`
-- **Hash:** 8-character MD5 hash derived from:
-  - data_type
-  - batch_dims
-  - timestamp
-  - run_information source
-  - control observables (names and locations)
-- **Requirement:** Must be non-empty and unique
+- **Requirement:** Must be non-empty and unique within a file
+- **Reference implementation:** 32-character hexadecimal MD5 hash of every observable's
+  location, data_name, data (numeric data rounded to 10 decimals; strings such as
+  timestamps hashed as text; ParticleGroups excluded) and units, plus the lattice location
+- **Combined files:** the data-point group is named after the ID
 
 #### @batch_dims
 - **Type:** Tuple/Array of positive integers
@@ -278,12 +297,24 @@ Two storage patterns are supported:
 
 #### Pattern 1: Location-Primary Storage
 
-**Structure:** `/<ID>/observables/<location_name>/<observable_name>`
+**Structure:**
+- Location with **one** observable: `/<ID>/observables/<PV>` (flattened; location in `@location`)
+- Location with **several** observables: `/<ID>/observables/<location_name>/<PV>`
+
 **Use Case:** Single location per observable (BPMs, screens, individual diagnostics)
+
+**Example (FACET-II):** BPM `BPM10781` reads three PVs, so they share a group:
+`observables/BPM10781/BPMS:IN10:781:TMIT`, `observables/BPM10781/BPMS:IN10:781:X`, ...
+A laser power meter with a single PV is stored as `observables/LASR:LT10:930:PWR` with
+`@location = "LASR:LT10:930:PWR"` (or its lattice element name, if mapped).
 
 **Requirements:**
 - Location must be list/array with exactly one element
-- Observable name must be non-empty string
+- Observable name (`data_name`) must be a non-empty string without `/`; for experimental data
+  it should be the full PV
+- Names must not collide: a flattened observable may not share its name with a location
+  group, another flattened observable, or `multi_location_data`; names within a location
+  group must be unique
 
 **Dataset Shape:** `batch_dims + feature_dims`
 
@@ -291,13 +322,19 @@ Two storage patterns are supported:
 
 ##### @location
 - **Type:** String
-- **Requirement:** Must match parent group name
-- **Purpose:** Redundant but explicit location identification
+- **Requirement:** Required on every location-primary dataset and ParticleGroup group, nested
+  or flattened. When nested, must match the parent group name. (Optional only for `Timestamp`.)
+- **Purpose:** Explicit location identification; for flattened observables it is the only
+  record of the location
 
-##### @control
+##### @read_only
 - **Type:** Boolean (True/False)
 - **Requirement:** Must be boolean type, not truthy/falsy value
-- **Purpose:** Indicates if this is a control variable (input) or output
+- **Purpose:** `True` for measured/read-back quantities (outputs), `False` for settable
+  control parameters (inputs)
+- **Legacy:** Files written before 0.1.2 store `@control` (= `not read_only`) instead. Readers
+  and validators must accept `@control` when `@read_only` is absent; if both are present they
+  must be consistent. New files store only `@read_only`.
 
 ##### @num_feature_dims
 - **Type:** Integer
@@ -310,18 +347,18 @@ Two storage patterns are supported:
 
 ##### @units
 - **Type:** String
-- **Requirement:** Should be valid unit string recognized by openPMD-beamphysics, but custom units are allowed
-- **Format:** Base unit without prefix (e.g., "m" not "um")
+- **Requirement:** Should be a unit recognized by openPMD-beamphysics, optionally with an SI
+  prefix; custom units are allowed
+- **Format:** Stored exactly as written, **including the SI prefix** (e.g., `"uW"`, `"mW"`,
+  `"pC"`, `"mm"`). Data values are in these units.
 - **Dimensionless:** Use "1" for unitless/dimensionless quantities
-- **Custom Units:** Non-recognized units (e.g., "unitless", "counts") are stored as-is with unit_multiplier=1.0
+- **Custom Units:** Non-recognized units (e.g., "unitless", "counts") are stored as-is
 - **ParticleGroup Data:** Units attribute is not stored for ParticleGroup datasets; units are embedded in the ParticleGroup's own metadata
 
-##### @unit_multiplier  
-- **Type:** Float
-- **Requirement:** Must be positive (> 0)
-- **Purpose:** Converts displayed units to base units
-- **Example:** For "um", unit_multiplier = 1e-6, units = "m"
-- **Calculation:** `base_value = displayed_value * unit_multiplier`
+##### @unit_multiplier (legacy)
+- No longer written (since 0.1.2). Files written before 0.1.2 stored the base unit in `@units`
+  (e.g. `"C"`) and the prefix factor here (e.g. `1e-12`). Validators accept it (must be > 0)
+  and report it as a legacy construct.
 
 **Additional Attributes (when num_feature_dims > 0):**
 
@@ -370,7 +407,31 @@ When `num_feature_dims > 0`, the following attributes are **required** and must 
 
 Same as location-primary storage except:
 - No `@location` attribute (shared via DATA_LOCATIONS)
-- Location dimension inserted between batch and feature dimensions
+- Location dimension inserted between batch and feature dimensions (omitted when
+  DATA_LOCATIONS has a single entry)
+- All observables in the group must have the same `num_feature_dims`
+
+### Timestamp Observable
+
+Per-shot timestamps are **optional**. When present they are stored as an observable with the
+reserved name `Timestamp` that follows all other observable rules.
+
+**Structure:** `/<ID>/observables/Timestamp` (or `/<ID>/observables/<location_name>/Timestamp`
+if a location is given that is shared with other observables)
+
+- **Shape:** `batch_dims` (one timestamp per shot; a scalar for `batch_dims = ()`)
+- **Data type:** UTF-8 variable-length strings
+- **Format:** ISO 8601-1:2019 extended-format calendar date and time of day, with seconds,
+  an optional decimal fraction, and a **mandatory** UTC designator or offset:
+  `YYYY-MM-DDThh:mm:ss[.f…](Z|±hh:mm)`
+  - Examples: `2026-10-16T13:55:40-07:00`, `2026-10-16T13:55:40.050-07:00`, `2026-10-16T20:55:40.050Z`
+  - Not allowed: dates without times, times without an offset, basic format (`20261016T135540Z`),
+    a space instead of `T`
+- **Attributes:** `@read_only = True`, `@num_feature_dims = 0`, `@units = ""`;
+  `@location` is optional
+- **Rules:** at most one `Timestamp` per data point; never stored in `multi_location_data`
+- **API:** `DataPoint2.add_timestamp(data, batch_dims=None, location=None)` accepts ISO 8601
+  strings or timezone-aware `datetime` objects
 
 ### ParticleGroup Storage
 
@@ -379,6 +440,11 @@ Same as location-primary storage except:
 **Naming Convention:**
 - 0-D arrays (single ParticleGroup): `<name>_0`
 - N-D arrays: `<name>_i_j_k` where i,j,k are batch indices
+
+**Placement:** Same rules as datasets: directly under `observables/` if the ParticleGroup is the
+only observable at its location, otherwise inside the `<location_name>/` group (or in
+`multi_location_data/`). Each per-shot group of a location-primary observable has an
+`@location` group attribute.
 
 **Examples:**
 ```
@@ -397,15 +463,21 @@ batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., init
 **Requirements:**
 - Container must be numpy object array
 - All elements must be ParticleGroup instances
-- No dataset attributes (units, control, etc.) stored
+- Only the `@location` attribute is added (location-primary observables); no units,
+  read_only, etc.
 - Each ParticleGroup is self-contained with internal metadata
 
 ### Data Type Requirements
 
 #### Regular Numeric Data
 - **Container:** Numpy ndarray
-- **Allowed dtypes:** float32, float64, int32, int64
+- **Allowed dtypes:** numeric — floating point (e.g. float32, float64), signed/unsigned integer
+  (e.g. int32, int64, uint16), boolean or complex
 - **Shape validation:** Must match `batch_dims + (num_locations,) + feature_dims`
+
+#### Timestamp Data
+- **Container:** Numpy unicode array in memory; UTF-8 variable-length strings in HDF5
+- **Content validation:** Every element is an ISO 8601 date-time with UTC offset (see [Timestamp Observable](#timestamp-observable))
 
 #### ParticleGroup Data
 - **Container:** Numpy object array
@@ -434,12 +506,13 @@ batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., init
 ### Unit Handling
 
 #### Unit String Processing
-1. Check for ASCII 'u' as micro prefix alias (convert to 'µ')
-2. Extract prefix from unit string
-3. Look up prefix multiplier (e.g., 'p' → 1e-12)
-4. Extract base unit (e.g., 'pC' → 'C')
-5. Validate base unit with openPMD-beamphysics
-6. If unit is not recognized, treat as custom unit
+The unit string is **stored unchanged**. To validate it, the reference implementation:
+1. Accepts the string directly if it is a known openPMD-beamphysics unit
+2. Otherwise strips the longest matching SI prefix (ASCII 'u' accepted for 'µ')
+3. Looks up the prefix multiplier (e.g., 'p' → 1e-12) and checks the base unit (e.g., 'pC' → 'C')
+4. If the unit is not recognized, treats it as a custom unit
+
+The multiplier is used only for this check; it is not written to the file.
 
 #### Supported Prefixes
 **SI Prefixes:** y, z, a, f, p, n, µ, m, c, d, da, h, k, M, G, T, P, E, Z, Y
@@ -447,13 +520,9 @@ batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., init
 
 #### Storage
 
-**Recognized Units:**
-- `@units`: Base unit string (e.g., "C" for coulombs)
-- `@unit_multiplier`: Numeric multiplier (e.g., 1e-12 for pC → C)
-
-**Custom/Unrecognized Units:**
-- `@units`: Original unit string as provided (e.g., "unitless", "counts", "arb")
-- `@unit_multiplier`: 1.0 (no conversion)
+- `@units`: Unit string exactly as provided, including prefix (e.g., "pC", "uW", "mm",
+  or custom units such as "unitless", "counts", "arb")
+- No `@unit_multiplier` (legacy, see above)
 
 ---
 
@@ -463,8 +532,10 @@ The following rules are enforced when creating and combining HDF5 files:
 
 **File-Level Rules:**
 - No duplicate IDs allowed within a file
-- All IDs must be non-empty and follow the format `<DataType>_<8-char-hash>`
+- All IDs must be non-empty strings; every ID in root @IDs has a group and every data-point
+  group is listed in @IDs
 - Root @Data_Standard_Version must match all batch @Data_Standard_Version attributes
+- Combined files store the lattice once, at the root
 
 **Lattice Rules:**
 - All batches in a combined file must share identical lattice configurations
@@ -476,12 +547,24 @@ The following rules are enforced when creating and combining HDF5 files:
 - Empty batch_dims `()` indicates a single data point
 
 **Observable Rules:**
-- control attribute must be boolean type
+- read_only attribute must be boolean type (legacy files: control, which must equal not read_only if both exist)
 - num_feature_dims must be >= 0
+- units must be a string (stored with SI prefix)
 - When num_feature_dims > 0, bin_size and offset must be specified in attrs dict
 - offset must be convertible to float
 - bin_size must be a float, or a string naming another observable (key) whose data has dimension batch_dims
-- unit_multiplier must be positive (> 0)
+- unit_multiplier (legacy files only) must be positive (> 0)
+
+**Layout Rules:**
+- A location with exactly one location-primary observable is stored at `observables/<PV>`;
+  a location with several observables is a group `observables/<location_name>/`
+- Every location-primary dataset and ParticleGroup group has `@location` (matching the parent
+  group name when nested); only `Timestamp` may omit it
+- No two entries may map to the same HDF5 path; `data_name` must not contain `/`
+
+**Timestamp Rules:**
+- Optional; at most one per data point; shape batch_dims; num_feature_dims = 0; read_only = True
+- Each value is an ISO 8601 extended-format date-time with UTC offset
 
 **Multi-Location Rules:**
 - All observables in multi_location_data must share identical DATA_LOCATIONS
@@ -493,8 +576,52 @@ The following rules are enforced when creating and combining HDF5 files:
 - Shape must match batch_dims exactly (no location or feature dims)
 
 **Data Type Rules:**
-- Regular numeric data: float32, float64, int32, int64
+- Regular data: numeric (float, integer, boolean, complex); Timestamp: ISO 8601 strings
 - Data shape must match: batch_dims + (num_locations,) + feature_dims
+
+---
+
+## Validating Files
+
+Every rule above can be checked independently of the code that wrote the data:
+
+```python
+from data_standard import validate_file, validate_datapoint
+
+report = validate_file("Example_v0.1.2.h5")   # single data-point or combined file
+report.ok           # True if no errors
+report.errors       # list of "path: message" strings
+report.warnings     # legacy/discouraged constructs that are still accepted
+report.raise_if_errors()
+
+validate_datapoint(D)   # in-memory DataPoint2 / SimulatedDataPoint2, without saving
+```
+
+Command line (exit code 1 if any file is invalid):
+
+```bash
+data-standard-validate file.h5 [more.h5 ...] [--strict] [--quiet]
+python -m data_standard file.h5 [...]
+```
+
+`--strict` (or `validate_file(..., strict=True)`) treats warnings as errors.
+
+Files written by earlier versions remain valid; the following are reported as **warnings**:
+`@control` instead of `@read_only`, `@unit_multiplier`, location groups holding a single
+observable, ParticleGroups without `@location`, and a `Data_Standard_Version` other than the
+validator's.
+
+---
+
+## Changes in 0.1.2
+
+- `@read_only` replaces `@control` (inverted); `control=` remains accepted by the Python API
+- Observables are named by their full PV (convention)
+- Locations with a single observable are flattened to `observables/<PV>`; `@location` is
+  written on every location-primary entry, including ParticleGroup groups
+- `@units` stores the unit with its SI prefix; `@unit_multiplier` is no longer written
+- Optional per-shot `Timestamp` observable (ISO 8601 with UTC offset)
+- Standalone validator (`validate_file`, `validate_datapoint`, `data-standard-validate`)
 
 ---
 

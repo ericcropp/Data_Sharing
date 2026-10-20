@@ -26,7 +26,7 @@ Usage:
 
     # Or with custom paths
     python FACET-II_to_ML_Example.py \
-        --input ./examples/data/output/FACET-II_Simulation_Example/FACET-II_Simulation_Example_v0.1.1.h5 \
+        --input ./examples/data/output/FACET-II_Simulation_Example/FACET-II_Simulation_Example_v0.1.2.h5 \
         --output-dir ./examples/data/output/FACET-II_to_ML_Example/
 
     # Specify screen location
@@ -49,12 +49,14 @@ import h5py
 
 # -- Configuration -----------------------------------------------------------
 # Default paths relative to repository root (assumes running from repo root)
-DEFAULT_INPUT = "./examples/data/output/FACET-II_Simulation_Example/FACET-II_Simulation_Example_v0.1.1.h5"
+DEFAULT_INPUT = "./examples/data/output/FACET-II_Simulation_Example/FACET-II_Simulation_Example_v0.1.2.h5"
 DEFAULT_OUTPUT_DIR = "./examples/data/output/FACET-II_to_ML_Example/"
 
 # Feature columns: scalar input parameters available in the Data Standard file.
-# These are stored as observables/<location>/<name> with shape (n,) for batched
-# data or shape () for single-shot data.
+# Each is named by its full parameter name (e.g. "GUNF:theta0_deg") and stored as
+# observables/<name> (if it is the only observable at its location) or
+# observables/<location>/<name>, with shape (n,) for batched data or shape ()
+# for single-shot data. The location is always in the @location attribute.
 FEATURES_241 = [
     "GUNF:theta0_deg", "GUNF:rf_field_scale", "SOL10111:solenoid_field_scale",
     "CQ10121:b1_gradient", "SQ10122:b1_gradient",
@@ -118,6 +120,48 @@ def _batch_ids(f):
     return [k for k in f.keys() if k not in ("lattice",)]
 
 
+def _is_particle_group(g):
+    """openPMD ParticleGroups contain a species subgroup with a speciesType attribute."""
+    return isinstance(g, h5py.Group) and any(
+        isinstance(c, h5py.Group) and "speciesType" in c.attrs for c in g.values())
+
+
+def _iter_location_entries(obs):
+    """Yield (location, name, item) for every location-based observable entry.
+
+    Handles both layouts: entries stored directly under observables/ with an
+    @location attribute (the only observable at that location), and entries
+    nested in observables/<location>/ groups (several observables at a location,
+    or files written before Data Standard 0.1.2).
+    """
+    for key, item in obs.items():
+        if key == "multi_location_data":
+            continue
+        if isinstance(item, h5py.Dataset) or _is_particle_group(item):
+            loc = _dec(item.attrs["location"]) if "location" in item.attrs else None
+            yield loc, key, item
+        else:
+            for nm, sub in item.items():
+                yield key, nm, sub
+
+
+def _column_name(loc, nm):
+    """Full parameter name; older files stored only the suffix under its location."""
+    if loc is None or nm == loc or nm.startswith(loc + ":"):
+        return nm
+    return "%s:%s" % (loc, nm)
+
+
+def _find_entry(obs, loc, name):
+    """Find the observable entry `name` at location `loc` in either layout."""
+    if loc in obs and not _is_particle_group(obs[loc]) and isinstance(obs[loc], h5py.Group):
+        if name in obs[loc]:
+            return obs[loc][name]
+    if name in obs and _dec(obs[name].attrs.get("location", "")) == loc:
+        return obs[name]
+    return None
+
+
 def _get_n_shots(g):
     """Determine number of shots from a UUID group's batch_dims attribute.
 
@@ -133,9 +177,9 @@ def _get_n_shots(g):
 def _collect_scalars(obs, n):
     """Extract all scalar numeric datasets from an observables group.
 
-    Walks every location group, finds datasets with shape (n,) (batched) or
-    shape () (single shot, treated as n=1). Builds column names as
-    "location:dataset_name".
+    Walks every location-based observable, finds datasets with shape (n,)
+    (batched) or shape () (single shot, treated as n=1). Column names are the
+    full parameter names (e.g. "GUNF:theta0_deg").
 
     Parameters
     ----------
@@ -149,26 +193,17 @@ def _collect_scalars(obs, n):
     dict : {column_name: ndarray float64 of shape (n,)}
     """
     out = {}
-    for loc in obs:
-        g = obs[loc]
-        if not isinstance(g, h5py.Group):
+    for loc, nm, it in _iter_location_entries(obs):
+        if not isinstance(it, h5py.Dataset):
             continue
-        # Skip groups that contain particle data or multi-location data
-        if loc in ("multi_location_data", "final_particles"):
+        if it.dtype.kind not in "fiu":
             continue
-        for nm in g:
-            it = g[nm]
-            if not isinstance(it, h5py.Dataset):
-                continue
-            if it.dtype.kind not in "fiu":
-                continue
-            # Handle both batched (n,) and unbatched () shapes
-            if it.ndim == 0 and n == 1:
-                colname = "%s:%s" % (loc, nm)
-                out[colname] = np.array([float(it[()])], dtype=np.float64)
-            elif it.ndim == 1 and it.shape[0] == n:
-                colname = "%s:%s" % (loc, nm)
-                out[colname] = np.asarray(it[:], dtype=np.float64)
+        colname = _column_name(loc, nm)
+        # Handle both batched (n,) and unbatched () shapes
+        if it.ndim == 0 and n == 1:
+            out[colname] = np.array([float(it[()])], dtype=np.float64)
+        elif it.ndim == 1 and it.shape[0] == n:
+            out[colname] = np.asarray(it[:], dtype=np.float64)
     return out
 
 
@@ -228,10 +263,12 @@ def _copy_particle_groups(src_path, dst_path, ids, batch_sizes, screen):
     """Copy openPMD ParticleGroups from Data Standard source into ML output.
 
     In the Data Standard, particle groups are stored per-shot as:
-        /<UUID>/observables/<location>/<data_name>_<i>/electron/...
+        /<UUID>/observables/<data_name>_<i>/electron/...             (only observable at its location)
+        /<UUID>/observables/<location>/<data_name>_<i>/electron/...  (several observables at the location)
+    Each per-shot group carries its location in the @location attribute.
 
-    For example: /UUID/observables/VCCF/initial_particles_0/electron/...
-                 /UUID/observables/PR10241/241_particles_0/electron/...
+    For example: /UUID/observables/initial_particles_0/electron/...  (@location = VCCF)
+                 /UUID/observables/241_particles_0/electron/...      (@location = PR10241)
 
     In the ML output, each shot gets its own group:
         features_<screen>/initial_particles/<i>/electron/...
@@ -277,10 +314,6 @@ def _copy_particle_groups(src_path, dst_path, ids, batch_sizes, screen):
             obs = src[uuid]["observables"]
 
             for pt, src_loc in pg_locs.items():
-                if src_loc not in obs:
-                    continue
-                loc_grp = obs[src_loc]
-
                 # Determine destination parent
                 if pt == "initial_particles":
                     dst_parent = fg["initial_particles"]
@@ -289,9 +322,9 @@ def _copy_particle_groups(src_path, dst_path, ids, batch_sizes, screen):
 
                 # Per-shot particle groups are named <data_name>_<i>
                 for i in range(n):
-                    src_name = "%s_%d" % (pt, i)
-                    if src_name in loc_grp:
-                        loc_grp.copy(src_name, dst_parent, name=str(offset + i))
+                    item = _find_entry(obs, src_loc, "%s_%d" % (pt, i))
+                    if item is not None:
+                        obs.copy(item, dst_parent, name=str(offset + i))
                         n_copied += 1
 
             offset += n
@@ -332,7 +365,8 @@ def convert(ds_path, output_dir, screen=None):
         # Auto-detect screen from available locations
         if screen is None:
             for cand, loc in SCREEN_LOCATION.items():
-                if any(loc in src[u].get("observables", {}) for u in ids):
+                if any(loc in {l for l, _, _ in _iter_location_entries(src[u]["observables"])}
+                       for u in ids if "observables" in src[u]):
                     screen = cand
                     break
         if screen is None:
