@@ -135,7 +135,7 @@ def _iter_location_entries(obs):
     or files written before Data Standard 0.1.2).
     """
     for key, item in obs.items():
-        if key == "multi_location_data":
+        if key.startswith("multi_location_data"):
             continue
         if isinstance(item, h5py.Dataset) or _is_particle_group(item):
             loc = _dec(item.attrs["location"]) if "location" in item.attrs else None
@@ -178,8 +178,9 @@ def _collect_scalars(obs, n):
     """Extract all scalar numeric datasets from an observables group.
 
     Walks every location-based observable, finds datasets with shape (n,)
-    (batched) or shape () (single shot, treated as n=1). Column names are the
-    full parameter names (e.g. "GUNF:theta0_deg").
+    (batched), (1,) (constant across the batch, broadcast to all n shots) or
+    () (single shot, treated as n=1). Column names are the full parameter
+    names (e.g. "GUNF:theta0_deg").
 
     Parameters
     ----------
@@ -199,21 +200,33 @@ def _collect_scalars(obs, n):
         if it.dtype.kind not in "fiu":
             continue
         colname = _column_name(loc, nm)
-        # Handle both batched (n,) and unbatched () shapes
+        # Handle batched (n,), broadcast (1,) and unbatched () shapes
         if it.ndim == 0 and n == 1:
             out[colname] = np.array([float(it[()])], dtype=np.float64)
-        elif it.ndim == 1 and it.shape[0] == n:
-            out[colname] = np.asarray(it[:], dtype=np.float64)
+        elif it.ndim == 1 and it.shape[0] in (n, 1):
+            out[colname] = np.broadcast_to(np.asarray(it[:], dtype=np.float64), (n,)).copy()
     return out
 
 
+def _per_shot(ds, n):
+    """Read a multi-location dataset as (n, n_locations), broadcasting size-1 / missing batch dims."""
+    arr = np.asarray(ds[()], dtype=np.float64)
+    if arr.ndim == 1:
+        arr = arr[np.newaxis, :]
+    return np.broadcast_to(arr, (n, arr.shape[-1]))
+
+
 def _extract_targets_at_screen(obs, n, screen, target_columns):
-    """Extract target values from multi_location_data at the screen z-position.
+    """Extract target values from multi-location data at the screen z-position.
 
     The Data Standard stores simulation statistics (sigma_x, sigma_y, etc.)
-    along the full beamline as 2D arrays: (n_shots, n_z_locations). This
-    function finds the z-index closest to the screen location and extracts
-    the corresponding column for each target.
+    along the full beamline in a multi-location group ("multi_location_data"
+    or "multi_location_data_<suffix>") as arrays of shape (n_shots, n_steps).
+    For each shot, this finds the step whose beam position is closest to the
+    screen and extracts each target there. The beam position is the per-shot
+    "mean_z" observable when DATA_LOCATIONS is time (Impact-T), or
+    DATA_LOCATIONS itself when it is already a z position (units "m",
+    files written before Data Standard 0.1.2).
 
     Parameters
     ----------
@@ -231,30 +244,28 @@ def _extract_targets_at_screen(obs, n, screen, target_columns):
     dict : {target_name: ndarray float64 of shape (n,)}
     """
     out = {}
-    if "multi_location_data" not in obs:
-        return out
-
-    mld = obs["multi_location_data"]
     screen_z = SCREEN_Z_POSITIONS.get(screen)
     if screen_z is None:
         return out
 
-    # Find the z-index closest to the screen location
-    if "DATA_LOCATIONS" not in mld:
+    groups = [obs[k] for k in obs if k.startswith("multi_location_data") and "DATA_LOCATIONS" in obs[k]]
+    mld = next((g for g in groups if any(c in g for c in target_columns)), None)
+    if mld is None:
         return out
-    z_locs = mld["DATA_LOCATIONS"][:]
-    z_idx = int(np.argmin(np.abs(z_locs - screen_z)))
+
+    locs = mld["DATA_LOCATIONS"]
+    if "mean_z" in mld:
+        z = _per_shot(mld["mean_z"], n)
+    elif _dec(locs.attrs.get("units", "")) == "m":
+        z = _per_shot(locs, n)
+    else:
+        return out
+    z_idx = np.argmin(np.abs(z - screen_z), axis=1)
+    shots = np.arange(n)
 
     for col in target_columns:
-        if col not in mld:
-            continue
-        ds = mld[col]
-        if ds.ndim == 2 and ds.shape[0] == n:
-            # Batched: shape (n, n_z), extract column at z_idx
-            out[col] = np.asarray(ds[:, z_idx], dtype=np.float64)
-        elif ds.ndim == 1 and n == 1:
-            # Single shot: shape (n_z,), extract value at z_idx
-            out[col] = np.array([float(ds[z_idx])], dtype=np.float64)
+        if col in mld:
+            out[col] = _per_shot(mld[col], n)[shots, z_idx].astype(np.float64)
 
     return out
 
@@ -262,13 +273,17 @@ def _extract_targets_at_screen(obs, n, screen, target_columns):
 def _copy_particle_groups(src_path, dst_path, ids, batch_sizes, screen):
     """Copy openPMD ParticleGroups from Data Standard source into ML output.
 
-    In the Data Standard, particle groups are stored per-shot as:
-        /<UUID>/observables/<data_name>_<i>/electron/...             (only observable at its location)
-        /<UUID>/observables/<location>/<data_name>_<i>/electron/...  (several observables at the location)
-    Each per-shot group carries its location in the @location attribute.
+    In the Data Standard, per-shot particle groups are stored in their location group,
+    and a single ParticleGroup (one for every shot, or batch_dims=()) under its plain name:
+        /<UUID>/observables/<location>/<data_name>_<i>/electron/...  (one per shot)
+        /<UUID>/observables/<data_name>/electron/...                 (single; only observable at its location)
+        /<UUID>/observables/<location>/<data_name>/electron/...      (single; location shared)
+    Each group carries its location in the @location attribute. Files written before
+    this layout (top-level <data_name>_<i>, or <data_name>_0 for a single shot) are
+    also handled.
 
-    For example: /UUID/observables/initial_particles_0/electron/...  (@location = VCCF)
-                 /UUID/observables/241_particles_0/electron/...      (@location = PR10241)
+    For example: /UUID/observables/PR10241/241_particles_3/electron/...  (shot 3)
+                 /UUID/observables/initial_particles/electron/...        (@location = VCCF)
 
     In the ML output, each shot gets its own group:
         features_<screen>/initial_particles/<i>/electron/...
@@ -320,9 +335,13 @@ def _copy_particle_groups(src_path, dst_path, ids, batch_sizes, screen):
                 else:
                     dst_parent = tg[pt]
 
-                # Per-shot particle groups are named <data_name>_<i>
+                # Per-shot groups are named <data_name>_<i>; a single group named
+                # <data_name> applies to every shot in the batch.
+                single = _find_entry(obs, src_loc, pt)
                 for i in range(n):
                     item = _find_entry(obs, src_loc, "%s_%d" % (pt, i))
+                    if item is None:
+                        item = single
                     if item is not None:
                         obs.copy(item, dst_parent, name=str(offset + i))
                         n_copied += 1
@@ -340,7 +359,7 @@ def convert(ds_path, output_dir, screen=None):
     Pipeline:
       1. Scan all UUID groups, determine n_shots per group.
       2. Collect scalar input parameters (features).
-      3. Extract target values from multi_location_data at screen location.
+      3. Extract target values from multi-location data at screen location.
       4. Write compound-dtype tables with features and targets.
       5. Copy openPMD ParticleGroups from source into output.
 

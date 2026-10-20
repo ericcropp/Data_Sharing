@@ -49,28 +49,52 @@ def test_single_and_shared_locations(tmp_path):
     assert report.ok and report.warnings == [], report.format()
 
 
-@pytest.mark.parametrize("batch_dims", [(), (3,), (2, 2)])
-def test_particle_groups_flattened_and_nested_have_location(batch_dims, tmp_path):
-    pgs = np.empty(batch_dims, dtype=object)
-    for idx in np.ndindex(batch_dims):
+def _pg_array(shape):
+    pgs = np.empty(shape, dtype=object)
+    for idx in np.ndindex(shape):
         pgs[idx] = _particle_group()
+    return pgs
+
+
+@pytest.mark.parametrize("batch_dims", [(3,), (2, 2)])
+def test_per_shot_particle_groups_stay_in_location_group(batch_dims, tmp_path):
+    """Per-shot ParticleGroups are several HDF5 entries, so they are never flattened."""
     D = DataPoint2()
-    # Only observable at VCCF -> flattened
-    D.add_observable(batch_dims=batch_dims, location='VCCF', data=pgs, data_name='initial_particles', units='', read_only=False)
+    # Only observable at VCCF, but per shot -> observables/VCCF/initial_particles_<i>
+    D.add_observable(batch_dims=batch_dims, location='VCCF', data=_pg_array(batch_dims), data_name='initial_particles',
+                     units='', read_only=False)
     # PR10241 has a ParticleGroup and a scalar -> nested
-    D.add_observable(batch_dims=batch_dims, location='PR10241', data=pgs.copy(), data_name='241_particles', units='')
+    D.add_observable(batch_dims=batch_dims, location='PR10241', data=_pg_array(batch_dims), data_name='241_particles', units='')
     D.add_observable(batch_dims=batch_dims, location='PR10241', data=np.ones(batch_dims), data_name='PROF:IN10:241:XRMS', units='um')
     path = _save(D, tmp_path)
     with h5py.File(path, 'r') as f:
         obs = f['observables']
+        assert set(obs.keys()) == {'VCCF', 'PR10241'}
         for idx in np.ndindex(batch_dims):
-            i = '_'.join(map(str, idx)) if idx else '0'
-            flat = obs[f'initial_particles_{i}']
+            i = '_'.join(map(str, idx))
+            vccf = obs['VCCF'][f'initial_particles_{i}']
             nested = obs['PR10241'][f'241_particles_{i}']
-            assert flat.attrs['location'] == 'VCCF'
+            assert vccf.attrs['location'] == 'VCCF'
             assert nested.attrs['location'] == 'PR10241'
-            ParticleGroup(h5=flat)  # still readable as openPMD
+            ParticleGroup(h5=vccf)  # still readable as openPMD
         assert obs['PR10241']['PROF:IN10:241:XRMS'].attrs['location'] == 'PR10241'
+    report = validate_file(path)
+    assert report.ok and report.warnings == [], report.format()
+
+
+@pytest.mark.parametrize("batch_dims, shape", [((), ()), ((3,), (1,)), ((2, 2), (1, 1))])
+def test_single_particle_group_is_flattened_with_plain_name(batch_dims, shape, tmp_path):
+    """One ParticleGroup for every shot (incl. batch_dims=()) is a single entry named <data_name>."""
+    D = DataPoint2()
+    D.add_observable(batch_dims=batch_dims, location='VCCF', data=_pg_array(shape), data_name='initial_particles',
+                     units='', read_only=False)
+    D.add_observable(batch_dims=batch_dims, location='PR10241', data=np.ones(batch_dims), data_name='PROF:IN10:241:XRMS', units='um')
+    path = _save(D, tmp_path)
+    with h5py.File(path, 'r') as f:
+        obs = f['observables']
+        assert set(obs.keys()) == {'initial_particles', 'PROF:IN10:241:XRMS'}
+        assert obs['initial_particles'].attrs['location'] == 'VCCF'
+        ParticleGroup(h5=obs['initial_particles'])
     report = validate_file(path)
     assert report.ok and report.warnings == [], report.format()
 
@@ -121,3 +145,28 @@ def test_multi_location_requires_location_units():
     with pytest.raises(ValueError, match="location_units must be specified"):
         obs.add_observable(batch_dims=(2,), location=[0.0, 1.0], data=np.zeros((2, 2)), data_name='sigma_x',
                            units='m', location_primary=False)
+
+
+@pytest.mark.parametrize("name", ['beam_1', 'screen_particles_0', 'x_12'])
+def test_particle_group_name_ending_in_index_rejected(name):
+    obs = Observables()
+    with pytest.raises(ValueError, match="must not end in '_<integer>'"):
+        obs.add_observable(batch_dims=(3,), location='OTR', data=_pg_array((1,)), data_name=name, units='')
+
+
+def test_particle_group_name_with_inner_digits_allowed():
+    obs = Observables()
+    obs.add_observable(batch_dims=(3,), location='PR10241', data=_pg_array((3,)), data_name='241_particles', units='')
+    obs.add_observable(batch_dims=(3,), location='L0AF', data=_pg_array((1,)), data_name='beam_1_end', units='')
+    obs.observable_checker()
+
+
+def test_layout_keeps_per_shot_particle_groups_in_location_group():
+    """Regression (0.1.2): a location whose only observable is per-shot ParticleGroups was flattened,
+    putting '241_particles_0', '241_particles_1', ... directly under observables/."""
+    obs = Observables()
+    obs.add_observable(batch_dims=(5,), location='PR10241', data=_pg_array((5,)), data_name='241_particles', units='')
+    obs.add_observable(batch_dims=(5,), location='VCCF', data=_pg_array((1,)), data_name='initial_particles', units='')
+    obs.add_observable(batch_dims=(5,), location='GUNF', data=np.ones(5), data_name='GUNF:theta0_deg', units='')
+    parents = {o.data_name: parent for o, parent in obs.layout()}
+    assert parents == {'241_particles': 'PR10241', 'initial_particles': '', 'GUNF:theta0_deg': ''}

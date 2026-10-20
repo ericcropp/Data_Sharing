@@ -223,3 +223,35 @@ def test_cli_exit_codes(valid_file, tmp_path, capsys):
     assert validate_main([str(valid_file), str(bad)]) == 1
     out = capsys.readouterr().out
     assert "FAIL" in out and "PASS" in out
+
+
+def _legacy_pg_file(path, batch_dims, names):
+    """File with ParticleGroups written directly under observables/ under the given names."""
+    from pmd_beamphysics import ParticleGroup
+    P = ParticleGroup(data={'x': np.zeros(4), 'px': np.zeros(4), 'y': np.zeros(4), 'py': np.zeros(4),
+                            'z': np.zeros(4), 'pz': np.ones(4) * 1e6, 't': np.zeros(4), 'status': np.ones(4),
+                            'weight': np.ones(4) * 1e-15, 'species': 'electron'})
+    with h5py.File(path, 'w') as f:
+        f.attrs.update({'ID': 'abc', 'batch_dims': np.array(batch_dims), 'Data_Standard_Version': VERSION,
+                        'run_information_source': 'Test', 'run_information_date': '2026-10-20',
+                        'run_information_notes': 'legacy PGs'})
+        f.create_group('lattice').attrs['lattice_location'] = 'https://example.com/lattice'
+        for name in names:
+            g = f.create_group(f'observables/{name}')
+            P.write(g)
+            g.attrs['location'] = 'PR10241'
+    return path
+
+
+def test_early_top_level_per_shot_particle_groups_warn(tmp_path):
+    path = _legacy_pg_file(tmp_path / 'early.h5', [3], [f'241_particles_{i}' for i in range(3)])
+    report = validate_file(path)
+    assert report.ok, report.format()
+    assert any("per-shot ParticleGroups should be stored" in w for w in report.warnings)
+
+
+def test_legacy_single_particle_group_name_warns(tmp_path):
+    path = _legacy_pg_file(tmp_path / 'legacy.h5', [], ['241_particles_0'])
+    report = validate_file(path)
+    assert report.ok, report.format()
+    assert any("legacy ParticleGroup name" in w for w in report.warnings)

@@ -23,6 +23,7 @@
     - [Pattern 1: Location-Primary Storage](#pattern-1-location-primary-storage)
     - [Pattern 2: Multi-Location Storage](#pattern-2-multi-location-storage)
   - [Timestamp Observable](#timestamp-observable)
+  - [Batch Broadcasting](#batch-broadcasting)
   - [ParticleGroup Storage](#particlegroup-storage)
   - [Data Type Requirements](#data-type-requirements)
   - [Dimension Validation](#dimension-validation)
@@ -73,18 +74,25 @@ All physical quantities are stored as **observables** with associated metadata:
 
 ### 2. Flexible Dimensionality
 Data can have multiple dimension types:
-- **Batch dimensions** (`batch_dims`): Independent experimental/simulation runs
+- **Batch dimensions** (`batch_dims`): Independent experimental/simulation runs. A batch
+  dimension of size 1 in the data is **broadcast** to every shot, so data that is constant
+  across a scan (e.g. an input image or ParticleGroup) is stored only once
+  (see [Batch Broadcasting](#batch-broadcasting)).
 - **Feature dimensions** (`num_feature_dims`): Intrinsic data structure (images, spectra, etc.)
 - **Location dimensions**: Multiple observation points along beamline
 
 ### 3. Location-Based Organization
 Two storage patterns:
 - **`location_primary=True`**: Data grouped by location. A location with several observables
-  is an HDF5 group holding them; a location with exactly one observable is not given a group —
-  the observable is stored directly under `observables/` and its location is recorded in
-  `@location`. Every location-primary entry carries `@location`, whether nested or not.
-- **`location_primary=False`**: Data grouped by type with shared location array (for example a
-  simulation dataset where outputs are generated at many points throughout the beamline)
+  (or with per-shot ParticleGroups) is an HDF5 group holding them; a location with exactly one
+  observable stored as a single HDF5 entry is not given a group — the observable is stored
+  directly under `observables/` and its location is recorded in `@location`. Every
+  location-primary entry carries `@location`, whether nested or not.
+- **Multi-location** (`location_primary=False` / `location_group`): Data grouped by type with a
+  shared location array (for example a simulation dataset where outputs are generated at many
+  points throughout the beamline). A data point may hold several such groups, named
+  `multi_location_data` or `multi_location_data_<suffix>` (e.g. `multi_location_data_impact`,
+  `multi_location_data_bmad`), each with its own location array.
 
 ### 4. ParticleGroup & Data Support
 - **Scalar/array data**: Stored as HDF5 datasets
@@ -105,6 +113,8 @@ Two storage patterns:
 **PV (Process Variable):** The control-system name of a single quantity (e.g. the EPICS PV `BPMS:IN10:781:TMIT`). Observables are named by their full PV; for simulations, the full simulation parameter name is used instead.
 
 **Feature dimensions:** Intrinsic dimensions of the data beyond batch and location (e.g., pixels in an image, bins in a spectrum)
+
+**Broadcasting:** A batch dimension of size 1 in an observable's data applies to every shot along that batch dimension (numpy broadcasting semantics).
 
 ---
 
@@ -143,23 +153,23 @@ The HDF5 file structure for combined files follows this hierarchy:
         ├── <PV>                            # Dataset: only observable at its location (flattened)
         │   ├── @location                   # Dataset attribute: Location name
         │   └── ...                         # Same attributes as nested datasets below
-        ├── <PV>_<i>[_<j>...]/              # ParticleGroup: only observable at its location
+        ├── <PV>/                           # Single ParticleGroup: only observable at its location
         │   └── @location                   # Group attribute: Location name
         ├── Timestamp                       # Optional dataset: ISO 8601 strings, shape batch_dims
         │
-        ├── <location_name>/                # Group: location holding several observables
-        │   ├── <PV>                        # Dataset: batch_dims + feature_dims
+        ├── <location_name>/                # Group: several observables, or per-shot ParticleGroups
+        │   ├── <PV>                        # Dataset: batch_dims + feature_dims (size-1 batch dims broadcast)
         │   │   ├── @location               # Dataset attribute: Location name (= group name)
         │   │   ├── @read_only              # Dataset attribute: Boolean: measured (True) / settable (False)
         │   │   ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
         │   │   ├── @units                  # Dataset attribute: Unit string incl. prefix (e.g., "mm", "pC")
         │   │   ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
         │   │   └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
-        │   └── <PV>_<i>[_<j>...]/          # ParticleGroup (one per batch element)
+        │   └── <PV>_<i>[_<j>...]/          # ParticleGroup (one per batch element), or <PV>/ if single
         │       └── @location               # Group attribute: Location name (= group name)
         │
-        └── multi_location_data/            # Multi-location storage
-            ├── DATA_LOCATIONS              # Dataset: location array
+        └── multi_location_data[_<suffix>]/ # Multi-location storage (one or more groups)
+            ├── DATA_LOCATIONS              # Dataset: location array (1-D, shared by all shots)
             │   ├── @units                  # Dataset attribute: Location units
             │   └── @num_feature_dims       # Dataset attribute: Always 0 for locations
             │
@@ -244,7 +254,7 @@ The HDF5 file structure for combined files follows this hierarchy:
 - **Type:** String
 - **Requirement:** Must be non-empty and unique within a file
 - **Reference implementation:** 32-character hexadecimal MD5 hash of every observable's
-  location, data_name, data (numeric data rounded to 10 decimals; strings such as
+  location, data_name, data shape, data (numeric data rounded to 10 decimals; strings such as
   timestamps hashed as text; ParticleGroups excluded) and units, plus the lattice location
 - **Combined files:** the data-point group is named after the ID
 
@@ -300,8 +310,10 @@ Two storage patterns are supported:
 #### Pattern 1: Location-Primary Storage
 
 **Structure:**
-- Location with **one** observable: `/<ID>/observables/<PV>` (flattened; location in `@location`)
-- Location with **several** observables: `/<ID>/observables/<location_name>/<PV>`
+- Location with **one** observable stored as a single HDF5 entry (a dataset, or a single
+  ParticleGroup): `/<ID>/observables/<PV>` (flattened; location in `@location`)
+- Location with **several** observables, or with per-shot ParticleGroups
+  (`<PV>_<i>[_<j>...]`): `/<ID>/observables/<location_name>/...`
 
 **Use Case:** Single location per observable (BPMs, screens, individual diagnostics)
 
@@ -315,10 +327,11 @@ A laser power meter with a single PV is stored as `observables/LASR:LT10:930:PWR
 - Observable name (`data_name`) must be a non-empty string without `/`; for experimental data
   it should be the full PV
 - Names must not collide: a flattened observable may not share its name with a location
-  group, another flattened observable, or `multi_location_data`; names within a location
-  group must be unique
+  group or another flattened observable; names within a location group must be unique
+- The prefix `multi_location_data` is reserved for multi-location groups: no location name or
+  `data_name` may start with it
 
-**Dataset Shape:** `batch_dims + feature_dims`
+**Dataset Shape:** `batch_dims + feature_dims`, where each batch dimension may be 1 (broadcast)
 
 **Dataset Attributes:**
 
@@ -372,7 +385,7 @@ When `num_feature_dims > 0`, the following attributes are **required** and must 
 - **Purpose:** Physical size of one bin/pixel in feature space
 - **Units:** Match observable units
 - **Note:** Can be positive or negative (negative for reversed coordinate axes)
-- **Per-shot bin sizes:** When the bin size differs across stacked/batched images, `bin_size` may be a string naming another observable (a key) instead of a float. The referenced observable must exist and its data must have dimension `batch_dims` (one bin size per batch element), i.e. its data shape must equal `batch_dims`.
+- **Per-shot bin sizes:** When the bin size differs across stacked/batched images, `bin_size` may be a string naming another observable (a key) instead of a float. The referenced observable must exist and its data must have dimension `batch_dims` (one bin size per batch element), i.e. its data shape must equal `batch_dims` (size-1 dimensions allowed, see [Batch Broadcasting](#batch-broadcasting)).
 - **Usage:** `attrs={'bin_size': 1e-6, 'offset': 0.0}` or `attrs={'bin_size': 'PixelResolution', 'offset': 0.0}`
 
 ##### @offset
@@ -386,24 +399,36 @@ When `num_feature_dims > 0`, the following attributes are **required** and must 
 
 #### Pattern 2: Multi-Location Storage
 
-**Structure:** `/<ID>/observables/multi_location_data/`
+**Structure:** `/<ID>/observables/multi_location_data/` and/or
+`/<ID>/observables/multi_location_data_<suffix>/`
 **Use Case:** Multiple observation points along beamline with shared location array
+
+**Groups:**
+- A data point may contain any number of multi-location groups. Each is named
+  `multi_location_data` or `multi_location_data_<suffix>` with a non-empty suffix
+  (e.g. `multi_location_data_impact`, `multi_location_data_bmad`).
+- Group names are unique (as HDF5 requires). Each group is self-contained: it has its own
+  `DATA_LOCATIONS` and the rules below apply **within** each group; different groups may use
+  different locations, location units and `num_feature_dims`.
+- **API:** `add_observable(..., location_group='multi_location_data_impact')`;
+  `location_primary=False` alone uses `multi_location_data`.
 
 **Special Dataset:**
 
 ##### DATA_LOCATIONS
 - **Type:** Numeric array
-- **Shape:** `(num_locations,)`
-- **Purpose:** Shared location coordinates for all observables in this group
+- **Shape:** `(num_locations,)` — shared by all shots in the data point
+- **Purpose:** Shared location coordinates for all observables in this group (a position,
+  or another coordinate such as time for time-stepped simulations)
 - **Attributes:**
-  - `@units`: Location units (typically "m" for position along beamline)
+  - `@units`: Location units (e.g. "m" for position along beamline, "s" for time)
   - `@num_feature_dims`: Always 0 (locations are scalar coordinates)
-- **Requirement:** All observables in multi_location_data must share identical DATA_LOCATIONS
+- **Requirement:** All observables in the group must share identical DATA_LOCATIONS
 - **Requirement:** location_units must be specified
 
 **Observable Datasets:**
 
-**Shape:** `batch_dims + (num_locations,) + feature_dims`
+**Shape:** `batch_dims + (num_locations,) + feature_dims` (size-1 batch dimensions broadcast)
 
 **Dataset Attributes:**
 
@@ -431,28 +456,58 @@ if a location is given that is shared with other observables)
     a space instead of `T`
 - **Attributes:** `@read_only = True`, `@num_feature_dims = 0`, `@units = ""`;
   `@location` is optional
-- **Rules:** at most one `Timestamp` per data point; never stored in `multi_location_data`
+- **Rules:** at most one `Timestamp` per data point; never stored in a multi-location group
 - **API:** `DataPoint2.add_timestamp(data, batch_dims=None, location=None)` accepts ISO 8601
   strings or timezone-aware `datetime` objects
+
+### Batch Broadcasting
+
+Every observable declares the data point's full `batch_dims`, but its data may use size 1 in any
+batch dimension. A size-1 dimension applies to every shot along that dimension (numpy
+broadcasting). This avoids storing copies of data that does not change during a scan — most
+importantly large inputs such as images and ParticleGroups.
+
+- **Data shape:** `b + (num_locations,) + feature_dims`, where `len(b) == len(batch_dims)` and each
+  `b[i]` is `batch_dims[i]` or `1`. The batch rank is always kept, so batch dimensions can be
+  told apart from feature dimensions.
+- **Applies to:** every observable type — scalars, waveforms/images, multi-location data,
+  ParticleGroups and `Timestamp`. `DATA_LOCATIONS` is always 1-D (shared by all shots).
+- **No marker attribute:** constancy is implied by the shape alone.
+- **Reading:** `np.broadcast_to(data, batch_dims + data.shape[len(batch_dims):])` gives one value per shot.
+
+**Examples** (`batch_dims = (5,)` unless stated):
+```
+scalar varying per shot             shape (5,)
+scalar constant over the scan       shape (1,)
+image constant over the scan        shape (1, H, W)
+batch_dims = (3, 4), constant along the first scan axis only   shape (1, 4)
+```
 
 ### ParticleGroup Storage
 
 **Special Handling:** ParticleGroups stored as HDF5 groups, not datasets
 
 **Naming Convention:**
-- 0-D arrays (single ParticleGroup): `<name>_0`
-- N-D arrays: `<name>_i_j_k` where i,j,k are batch indices
+- A ParticleGroup `<name>` must not itself end in `_<integer>` (that suffix is reserved for
+  per-shot indices)
+- A single ParticleGroup for every shot (data shape all ones, including `batch_dims = ()`):
+  `<name>` (no index)
+- Otherwise one group per element of the data shape: `<name>_i_j_k`, where i,j,k index the data's
+  batch dimensions (index 0 along broadcast size-1 dimensions)
 
-**Placement:** Same rules as datasets: directly under `observables/` if the ParticleGroup is the
-only observable at its location, otherwise inside the `<location_name>/` group (or in
-`multi_location_data/`). Each per-shot group of a location-primary observable has an
-`@location` group attribute.
+**Placement:** A single ParticleGroup follows the same rules as datasets: directly under
+`observables/` if it is the only observable at its location, otherwise inside the
+`<location_name>/` group. Per-shot ParticleGroups are several entries and are therefore always
+stored inside their `<location_name>/` group (or in a multi-location group). Each group of a
+location-primary observable has an `@location` group attribute.
 
 **Examples:**
 ```
-batch_dims = ()  →  initial_particles_0
-batch_dims = (5,)  →  initial_particles_0, initial_particles_1, ..., initial_particles_4
-batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., initial_particles_1_2
+batch_dims = ()                    →  initial_particles
+batch_dims = (5,), data shape (1,) →  initial_particles                  (same for all shots)
+batch_dims = (5,)                  →  VCCF/initial_particles_0, ..., VCCF/initial_particles_4
+batch_dims = (2,3)                 →  VCCF/initial_particles_0_0, ..., VCCF/initial_particles_1_2
+batch_dims = (2,3), shape (1,3)    →  VCCF/initial_particles_0_0, VCCF/initial_particles_0_1, VCCF/initial_particles_0_2
 ```
 
 **Structure:** Uses openPMD-beamphysics native format with:
@@ -475,7 +530,7 @@ batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., init
 - **Container:** Numpy ndarray
 - **Allowed dtypes:** numeric — floating point (e.g. float32, float64), signed/unsigned integer
   (e.g. int32, int64, uint16), boolean or complex
-- **Shape validation:** Must match `batch_dims + (num_locations,) + feature_dims`
+- **Shape validation:** Must match `batch_dims + (num_locations,) + feature_dims` (size-1 batch dims allowed)
 
 #### Timestamp Data
 - **Container:** Numpy unicode array in memory; UTF-8 variable-length strings in HDF5
@@ -485,19 +540,20 @@ batch_dims = (2,3)  →  initial_particles_0_0, initial_particles_0_1, ..., init
 - **Container:** Numpy object array
 - **dtype:** Must be `object`
 - **Content validation:** Every element must be ParticleGroup instance
-- **Shape validation:** Must match batch_dims exactly (no location or feature dims)
+- **Shape validation:** Must match batch_dims (size-1 dims allowed; no location or feature dims)
 
 ### Dimension Validation
 
 #### Batch Dimensions
 - **Empty tuple:** `batch_dims = ()` requires exactly one data point
 - **Non-empty:** Product of batch_dims must equal number of data points
-- **Data shape:** First N dimensions of data must match N batch dimensions
+- **Data shape:** First N dimensions of data must match the N batch dimensions, each either equal
+  or 1 (broadcast)
 
 #### Location Dimensions
 - **location_primary=True:** Exactly 1 location required
-- **location_primary=False:** 1+ locations allowed, must provide location_units
-- **Multi-location consistency:** All observables in multi_location_data must share identical locations
+- **Multi-location (location_primary=False / location_group):** 1+ locations allowed, must provide location_units
+- **Multi-location consistency:** Within each multi-location group, all observables must share identical locations
 
 #### Feature Dimensions
 - **num_feature_dims=0:** Scalar (single value per batch/location point)
@@ -554,12 +610,14 @@ The following rules are enforced when creating and combining HDF5 files:
 - units must be a string (stored with SI prefix)
 - When num_feature_dims > 0, bin_size and offset must be specified in attrs dict
 - offset must be convertible to float
-- bin_size must be a float, or a string naming another observable (key) whose data has dimension batch_dims
+- bin_size must be a float, or a string naming another observable (key) whose data has dimension batch_dims (size-1 dims allowed)
 - unit_multiplier (legacy files only) must be positive (> 0)
 
 **Layout Rules:**
-- A location with exactly one location-primary observable is stored at `observables/<PV>`;
-  a location with several observables is a group `observables/<location_name>/`
+- A location with exactly one location-primary observable stored as a single entry is stored at
+  `observables/<PV>`; a location with several observables, or with per-shot ParticleGroups, is a
+  group `observables/<location_name>/`
+- Names starting with `multi_location_data` are reserved for multi-location groups
 - Every location-primary dataset and ParticleGroup group has `@location` (matching the parent
   group name when nested); only `Timestamp` may omit it
 - No two entries may map to the same HDF5 path; `data_name` must not contain `/`
@@ -569,17 +627,24 @@ The following rules are enforced when creating and combining HDF5 files:
 - Each value is an ISO 8601 extended-format date-time with UTC offset
 
 **Multi-Location Rules:**
-- All observables in multi_location_data must share identical DATA_LOCATIONS
+- Multi-location groups are named `multi_location_data` or `multi_location_data_<suffix>`
+- Within each group, all observables share identical DATA_LOCATIONS, location_units and
+  num_feature_dims; DATA_LOCATIONS is 1-D
 - location_units must be specified for multi-location data
+
+**Broadcasting Rules:**
+- Each leading batch dimension of an observable's data equals `batch_dims[i]` or 1
 
 **ParticleGroup Rules:**
 - Container must be numpy object array with dtype='object'
 - All elements must be ParticleGroup instances
-- Shape must match batch_dims exactly (no location or feature dims)
+- Shape must match batch_dims (size-1 dims allowed; no location or feature dims)
+- Per-shot groups `<name>_i[_j...]` form a full index grid of the data shape; a single
+  ParticleGroup is named `<name>`; `<name>` must not end in `_<integer>`
 
 **Data Type Rules:**
 - Regular data: numeric (float, integer, boolean, complex); Timestamp: ISO 8601 strings
-- Data shape must match: batch_dims + (num_locations,) + feature_dims
+- Data shape must match: batch_dims + (num_locations,) + feature_dims (size-1 batch dims allowed)
 
 ---
 
@@ -610,8 +675,9 @@ python -m data_standard file.h5 [...]
 
 Files written by earlier versions remain valid; the following are reported as **warnings**:
 `@control` instead of `@read_only`, `@unit_multiplier`, location groups holding a single
-observable, ParticleGroups without `@location`, and a `Data_Standard_Version` other than the
-validator's.
+single-entry observable, per-shot ParticleGroups directly under `observables/`, a single
+ParticleGroup named `<name>_0` for `batch_dims = ()`, ParticleGroups without `@location`, and a
+`Data_Standard_Version` other than the validator's.
 
 ---
 
@@ -619,8 +685,12 @@ validator's.
 
 - `@read_only` replaces `@control` (inverted); `control=` remains accepted by the Python API
 - Observables are named by their full PV (convention)
-- Locations with a single observable are flattened to `observables/<PV>`; `@location` is
-  written on every location-primary entry, including ParticleGroup groups
+- Locations with a single observable stored as one entry are flattened to `observables/<PV>`;
+  per-shot ParticleGroups stay in their location group; `@location` is written on every
+  location-primary entry, including ParticleGroup groups
+- Batch broadcasting: size-1 batch dimensions apply to every shot, so data that is constant
+  over a scan is stored once; a single ParticleGroup is named `<name>` (previously `<name>_0`)
+- Multiple multi-location groups (`multi_location_data_<suffix>`), each with its own DATA_LOCATIONS
 - `@units` stores the unit with its SI prefix; `@unit_multiplier` is no longer written
 - Optional per-shot `Timestamp` observable (ISO 8601 with UTC offset)
 - Standalone validator (`validate_file`, `validate_datapoint`, `data-standard-validate`)

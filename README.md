@@ -143,6 +143,36 @@ For experimental data, use the **full PV** as `data_name` and the lattice elemen
 data, the full simulation parameter name (e.g. `'CQ10121:b1_gradient'`) plays the role
 of the PV.
 
+### Constant data in a scan (broadcasting)
+
+Each batch dimension of an observable's data may be 1, in which case the value applies to
+every shot along that dimension. Data that does not change during a scan is stored once:
+
+```python
+batch_dims = (5,)
+D.add_observable(batch_dims=batch_dims, location=['GUNF'], data=[0.5],   # same for all 5 shots
+                 data_name='GUNF:rf_field_scale', units='V/m', read_only=False)
+D.add_observable(batch_dims=batch_dims, num_feature_dims=2, location=['VCCF'],
+                 data=vcc_image[np.newaxis],                               # shape (1, H, W)
+                 data_name='CAMR:LT10:900:Image', units='counts', read_only=False,
+                 attrs={'bin_size': 1e-6, 'offset': 0.0})
+```
+
+### Multiple multi-location groups
+
+Data sampled along the beamline shares one location array per group. Several groups can be
+used, each named `multi_location_data` or `multi_location_data_<suffix>` with its own
+`DATA_LOCATIONS`:
+
+```python
+D.add_observable(batch_dims=batch_dims, location=t_steps, location_units='s',
+                 data=sigma_x_impact, data_name='sigma_x', units='m',
+                 location_group='multi_location_data_impact')
+D.add_observable(batch_dims=batch_dims, location=s_positions, location_units='m',
+                 data=sigma_x_bmad, data_name='sigma_x', units='m',
+                 location_group='multi_location_data_bmad')
+```
+
 ## Validation
 
 Validation runs automatically when a data point is saved, and can also be run on its own:
@@ -163,8 +193,8 @@ python -m data_standard file1.h5 --strict     # --strict treats warnings as erro
 ```
 
 Files written by older versions (e.g. `@control`, `@unit_multiplier`, single observables
-nested in a location group) are still accepted; these legacy constructs are reported as
-warnings. `combine_files(..., validate=True)` validates the combined file before the
+nested in a location group, per-shot ParticleGroups directly under `observables/`) are still
+accepted; these legacy constructs are reported as warnings. `combine_files(..., validate=True)` validates the combined file before the
 individual input files are deleted.
 
 ## Data Structure
@@ -197,12 +227,12 @@ The HDF5 file structure follows this hierarchy:
     ├── @simulation_end                     # Group attribute: (Simulation only) End position
     │
     └── observables/
-        ├── <PV>                            # Dataset: the only observable at its location
+        ├── <PV>                            # Dataset (or single ParticleGroup): only observable at its location
         │   ├── @location                   # Dataset attribute: Location name
         │   └── ...                         # Same attributes as below
         ├── Timestamp                       # Optional dataset: ISO 8601 strings, shape batch_dims
-        ├── <location_name>/                # Group: location with several observables
-        │   └── <PV>                        # Dataset: batch_dims + feature_dims
+        ├── <location_name>/                # Group: several observables, or per-shot ParticleGroups
+        │   └── <PV>                        # Dataset: batch_dims + feature_dims (size-1 batch dims broadcast)
         │       ├── @location               # Dataset attribute: Location name
         │       ├── @read_only              # Dataset attribute: Boolean: measured (True) or settable (False)
         │       ├── @num_feature_dims       # Dataset attribute: Integer: feature dimensions
@@ -210,8 +240,8 @@ The HDF5 file structure follows this hierarchy:
         │       ├── @bin_size               # Dataset attribute: (Required if num_feature_dims > 0)
         │       └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
         │
-        └── multi_location_data/            # Multi-location storage
-            ├── DATA_LOCATIONS              # Dataset: location array
+        └── multi_location_data[_<suffix>]/ # Multi-location storage (one or more groups)
+            ├── DATA_LOCATIONS              # Dataset: location array (1-D, shared by all shots)
             │   ├── @units                  # Dataset attribute: Location units
             │   └── @num_feature_dims       # Dataset attribute: Always 0 for locations
             │
@@ -223,8 +253,9 @@ The HDF5 file structure follows this hierarchy:
                 └── @offset                 # Dataset attribute: (Required if num_feature_dims > 0)
 ```
 
-ParticleGroups are stored as `<data_name>_<i>[_<j>...]` groups (one per batch element) in the
-same places, each with an `@location` attribute.
+ParticleGroups are stored as groups with an `@location` attribute: per-shot ParticleGroups as
+`<location_name>/<data_name>_<i>[_<j>...]` (one per batch element), and a single ParticleGroup
+(one for every shot, or `batch_dims=()`) as `<data_name>`, placed like a dataset.
 
 ### PV to Lattice Mapping (Experimental Data)
 
@@ -260,6 +291,11 @@ Processes Impact-T simulation archives with particle distributions:
 python examples/FACET-II_Simulation_Example.py 
 ```
 Output: `FACET-II_Simulation_Example_v<version>.h5`
+
+The Impact-T statistics (beam sizes, emittances, `mean_z`, ...) are stored in
+`multi_location_data_impact` with the simulation time `t` (s) as `DATA_LOCATIONS`. Initial,
+screen and final ParticleGroups are stored at their lattice locations, and inputs that are the
+same for every simulation in a batch are stored once (shape `(1,)`).
 
 ### FACET-II Data Standard to ML-ready Format
 Converts the Data Standard HDF5 from the simulation example into an ML-ready file

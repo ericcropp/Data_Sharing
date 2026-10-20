@@ -38,6 +38,8 @@ from .Data_Standard_2 import (
     DataPoint2,
     SimulationMetadata,
     is_iso8601_timestamp,
+    is_multi_location_group_name,
+    is_broadcastable_batch_shape,
 )
 
 __all__ = [
@@ -165,13 +167,57 @@ def _is_string_dataset(ds):
     return h5py.check_string_dtype(ds.dtype) is not None or ds.dtype.kind == "S"
 
 
-def _split_pg_name(name, batch_dims):
-    """Split '<data_name>_<i>[_<j>...]' into (data_name, index) using the batch rank, or None."""
-    rank = max(len(batch_dims), 1) if batch_dims is not None else 1
+def _split_pg_name(name, rank):
+    """Split '<data_name>_<i>[_<j>...]' (``rank`` indices) into (data_name, index), or None."""
     parts = name.rsplit("_", rank)
     if len(parts) != rank + 1 or parts[0] == "" or not all(p.isdigit() for p in parts[1:]):
         return None
     return parts[0], tuple(int(p) for p in parts[1:])
+
+
+def _group_particle_groups(parent_path, names, batch_dims, report):
+    """
+    Group the ParticleGroup entries of one parent group into observables.
+
+    A ParticleGroup observable is either a single group named '<data_name>' (one ParticleGroup for
+    every shot) or a full grid of '<data_name>_<i>[_<j>...]' groups, one index per batch dimension,
+    whose index ranges are batch_dims[i] or 1 (broadcast).
+
+    Returns:
+        dict: observable name -> number of HDF5 entries
+    """
+    observables = {}
+    if batch_dims is None:
+        return {n: 1 for n in names}
+    if len(batch_dims) == 0:
+        for n in names:
+            observables[n] = 1
+            if _split_pg_name(n, 1) == (n[:-2], (0,)):
+                report.warn(f"{parent_path}/{n}", "legacy ParticleGroup name '<data_name>_0' for batch_dims=(); "
+                                                  "since 0.1.2 a single ParticleGroup is named '<data_name>'")
+        return observables
+
+    rank = len(batch_dims)
+    by_base = {}
+    for n in names:
+        parsed = _split_pg_name(n, rank)
+        if parsed is None:
+            observables[n] = 1
+        else:
+            by_base.setdefault(parsed[0], []).append((n, parsed[1]))
+    for base, entries in by_base.items():
+        if len(entries) == 1:
+            observables[entries[0][0]] = 1
+            continue
+        indices = [idx for _, idx in entries]
+        shape = tuple(max(idx[d] for idx in indices) + 1 for d in range(rank))
+        if (len(indices) != len(set(indices)) or set(indices) != set(np.ndindex(*shape))
+                or not is_broadcastable_batch_shape(shape, batch_dims)):
+            report.error(f"{parent_path}/{base}_*",
+                         f"ParticleGroup indices {sorted(indices)} do not form a grid matching batch_dims {batch_dims} "
+                         f"(each index range must be batch_dims[i] or 1)")
+        observables[base] = len(entries)
+    return observables
 
 
 def _is_particle_group(grp):
@@ -189,7 +235,6 @@ class _ObservablesContext:
         self.batch_dims = batch_dims
         self.dataset_shapes = {}
         self.bin_size_refs = []
-        self.pg_indices = {}
         self.timestamps = []
 
 
@@ -338,7 +383,7 @@ def _check_dataset(ds, path, ctx, mode, expected_location=None, n_locations=None
     Validate one observable dataset.
 
     mode: 'top' (flattened, directly under observables/), 'nested' (inside a location group),
-    or 'multi' (inside multi_location_data).
+    or 'multi' (inside a multi-location group).
     """
     name = path.rsplit("/", 1)[-1]
     attrs = ds.attrs
@@ -348,7 +393,7 @@ def _check_dataset(ds, path, ctx, mode, expected_location=None, n_locations=None
     location = _decode(attrs.get("location")) if "location" in attrs else None
     if mode == "multi":
         if location is not None:
-            report.warn(path, "@location is ignored in multi_location_data (locations are in DATA_LOCATIONS)")
+            report.warn(path, "@location is ignored in multi-location groups (locations are in DATA_LOCATIONS)")
     elif location is None:
         if not (is_timestamp and mode == "top"):
             report.error(path, "missing @location")
@@ -404,15 +449,16 @@ def _check_dataset(ds, path, ctx, mode, expected_location=None, n_locations=None
             report.error(path, f"expected {expected_ndim} dimensions (batch={len(bd)}, location={n_loc_dims}, "
                                f"feature={nfd}), got shape {ds.shape}")
         else:
-            if tuple(ds.shape[:len(bd)]) != tuple(bd):
-                report.error(path, f"leading dimensions {ds.shape[:len(bd)]} do not match batch_dims {bd}")
+            if not is_broadcastable_batch_shape(ds.shape[:len(bd)], bd):
+                report.error(path, f"leading dimensions {ds.shape[:len(bd)]} do not match batch_dims {bd} "
+                                   f"(each must be batch_dims[i] or 1)")
             if n_loc_dims and ds.shape[len(bd)] != n_locations:
                 report.error(path, f"location dimension is {ds.shape[len(bd)]}, expected {n_locations} (DATA_LOCATIONS)")
 
     if is_timestamp:
         ctx.timestamps.append(path)
         if mode == "multi":
-            report.error(path, "Timestamp must not be stored in multi_location_data")
+            report.error(path, "Timestamp must not be stored in a multi-location group")
         if nfd not in (None, 0):
             report.error(path, "Timestamp must have num_feature_dims = 0")
         if read_only is False:
@@ -430,15 +476,7 @@ def _check_dataset(ds, path, ctx, mode, expected_location=None, n_locations=None
     ctx.dataset_shapes.setdefault(name, []).append(tuple(ds.shape))
 
 
-def _check_particle_group(grp, path, ctx, parent_path, require_location, expected_location, report):
-    name = path.rsplit("/", 1)[-1]
-    parsed = _split_pg_name(name, ctx.batch_dims)
-    if parsed is None:
-        report.error(path, "ParticleGroup entries must be named <data_name>_<i>[_<j>...] with one index per batch dimension")
-        return
-    base, index = parsed
-    ctx.pg_indices.setdefault((parent_path, base), []).append((path, index))
-
+def _check_particle_group(grp, path, require_location, expected_location, report):
     if "location" not in grp.attrs:
         if require_location:
             report.error(path, "missing @location")
@@ -452,22 +490,15 @@ def _check_particle_group(grp, path, ctx, parent_path, require_location, expecte
             report.error(path, f"@location '{location}' does not match parent group '{expected_location}'")
 
 
-def _observable_key(name, item, batch_dims):
-    if isinstance(item, h5py.Group):
-        parsed = _split_pg_name(name, batch_dims)
-        if parsed:
-            return parsed[0]
-    return name
-
-
 def _check_multi_location(mg, path, ctx, report):
+    group = path.rsplit("/", 1)[-1]
     n_locations = None
     if DATA_LOCATIONS_NAME not in mg or not isinstance(mg[DATA_LOCATIONS_NAME], h5py.Dataset):
         report.error(path, f"missing {DATA_LOCATIONS_NAME} dataset")
     else:
         locs = mg[DATA_LOCATIONS_NAME]
         if locs.ndim > 1:
-            report.error(f"{path}/{DATA_LOCATIONS_NAME}", f"must be 1-D, got shape {locs.shape}")
+            report.error(f"{path}/{DATA_LOCATIONS_NAME}", f"must be 1-D (shared by all shots), got shape {locs.shape}")
         else:
             n_locations = 1 if locs.ndim == 0 else locs.shape[0]
         units = _decode(locs.attrs.get("units"))
@@ -475,6 +506,7 @@ def _check_multi_location(mg, path, ctx, report):
             report.error(f"{path}/{DATA_LOCATIONS_NAME}", "@units (location units) must be a non-empty string")
 
     feature_dims = set()
+    pg_names = []
     for name, item in mg.items():
         if name == DATA_LOCATIONS_NAME:
             continue
@@ -484,11 +516,13 @@ def _check_multi_location(mg, path, ctx, report):
             if "num_feature_dims" in item.attrs:
                 feature_dims.add(int(item.attrs["num_feature_dims"]) if _is_int(item.attrs["num_feature_dims"]) else None)
         elif _is_particle_group(item):
-            _check_particle_group(item, p, ctx, path, False, None, report)
+            _check_particle_group(item, p, False, None, report)
+            pg_names.append(name)
         else:
-            report.error(p, "unexpected group in multi_location_data")
+            report.error(p, f"unexpected group in {group}")
+    _group_particle_groups(path, pg_names, ctx.batch_dims, report)
     if len(feature_dims) > 1:
-        report.error(path, f"all observables in multi_location_data must have the same num_feature_dims, found {sorted(d for d in feature_dims if d is not None)}")
+        report.error(path, f"all observables in {group} must have the same num_feature_dims, found {sorted(d for d in feature_dims if d is not None)}")
 
 
 def _check_observables(og, path, batch_dims, report):
@@ -497,51 +531,61 @@ def _check_observables(og, path, batch_dims, report):
         return
     ctx = _ObservablesContext(batch_dims)
 
+    top_pg_names = []
     for name, item in og.items():
         p = f"{path}/{name}"
-        if name == MULTI_LOCATION_GROUP:
-            if isinstance(item, h5py.Group):
+        if name.startswith(MULTI_LOCATION_GROUP):
+            if not is_multi_location_group_name(name):
+                report.error(p, f"names starting with '{MULTI_LOCATION_GROUP}' are reserved for multi-location groups "
+                                f"('{MULTI_LOCATION_GROUP}' or '{MULTI_LOCATION_GROUP}_<suffix>')")
+            elif isinstance(item, h5py.Group) and not _is_particle_group(item):
                 _check_multi_location(item, p, ctx, report)
             else:
-                report.error(p, f"{MULTI_LOCATION_GROUP} must be a group")
+                report.error(p, "multi-location entries must be groups")
         elif isinstance(item, h5py.Dataset):
             _check_dataset(item, p, ctx, "top", report=report)
         elif _is_particle_group(item):
-            _check_particle_group(item, p, ctx, path, True, None, report)
+            _check_particle_group(item, p, True, None, report)
+            top_pg_names.append(name)
         else:
             # Location group
             members = list(item.items())
             if not members:
                 report.warn(p, "empty location group")
                 continue
-            if len({_observable_key(n, it, batch_dims) for n, it in members}) == 1:
-                report.warn(p, "location group holds a single observable; since 0.1.2 it should be stored "
-                               "directly under observables/ with an @location attribute")
+            n_datasets = 0
+            pg_names = []
             for sub_name, sub in members:
                 sp = f"{p}/{sub_name}"
                 if isinstance(sub, h5py.Dataset):
                     _check_dataset(sub, sp, ctx, "nested", expected_location=name, report=report)
+                    n_datasets += 1
                 elif _is_particle_group(sub):
-                    _check_particle_group(sub, sp, ctx, p, False, name, report)
+                    _check_particle_group(sub, sp, False, name, report)
+                    pg_names.append(sub_name)
                 else:
                     report.error(sp, "unexpected nested group (location groups may only contain observables)")
+            pg_observables = _group_particle_groups(p, pg_names, batch_dims, report)
+            if n_datasets + len(pg_observables) == 1 and all(n == 1 for n in pg_observables.values()):
+                report.warn(p, "location group holds a single observable stored as one entry; since 0.1.2 it should "
+                               "be stored directly under observables/ with an @location attribute")
+
+    for base, n_entries in _group_particle_groups(path, top_pg_names, batch_dims, report).items():
+        if n_entries > 1:
+            report.warn(f"{path}/{base}_*", "per-shot ParticleGroups should be stored in an observables/<location>/ "
+                                            "group (early 0.1.2 layout)")
 
     if len(ctx.timestamps) > 1:
         report.error(path, f"at most one {TIMESTAMP_NAME} observable is allowed, found {len(ctx.timestamps)}")
 
     if batch_dims is not None:
-        expected = {(0,)} if len(batch_dims) == 0 else set(np.ndindex(*batch_dims))
-        for (parent, base), entries in ctx.pg_indices.items():
-            indices = [idx for _, idx in entries]
-            if len(indices) != len(set(indices)) or set(indices) != expected:
-                report.error(f"{parent}/{base}_*", f"ParticleGroup indices {sorted(indices)} do not cover batch_dims {batch_dims}")
-
         for ref_path, key in ctx.bin_size_refs:
             shapes = ctx.dataset_shapes.get(key)
             if not shapes:
                 report.error(ref_path, f"@bin_size key '{key}' does not match any observable")
-            elif tuple(batch_dims) not in shapes:
-                report.error(ref_path, f"@bin_size key '{key}' must reference data with dimension batch_dims={batch_dims}, got {shapes}")
+            elif not any(is_broadcastable_batch_shape(shape, batch_dims) for shape in shapes):
+                report.error(ref_path, f"@bin_size key '{key}' must reference data with dimension batch_dims={batch_dims} "
+                                       f"(size-1 dimensions allowed), got {shapes}")
 
 
 def _check_datapoint(g, path, report, root_version=None, require_lattice=True):

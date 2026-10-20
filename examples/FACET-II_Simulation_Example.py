@@ -136,6 +136,33 @@ output_unit_list = {
 
 
 
+def particle_groups_equal(a, b):
+    """True if two ParticleGroups hold identical particles."""
+    keys = ('x', 'px', 'y', 'py', 'z', 'pz', 't', 'weight', 'status')
+    return len(a) == len(b) and a.species == b.species and all(np.array_equal(a[k], b[k]) for k in keys)
+
+
+def batch_array(values, batch_dims, same):
+    """
+    Stack one value per simulation into an array whose leading dimension is the batch.
+
+    For batch_dims=() the single value is returned unstacked. If every value in a batch is
+    identical (per ``same``), it is stored once with a size-1 batch dimension, which the
+    Data Standard broadcasts to every shot.
+    """
+    if len(batch_dims) == 0:
+        values = values[:1]
+    elif all(same(values[0], v) for v in values[1:]):
+        values = values[:1]
+    if isinstance(values[0], ParticleGroup):
+        out = np.empty(len(values), dtype=object)
+        for i, v in enumerate(values):
+            out[i] = v
+    else:
+        out = np.stack([np.asarray(v) for v in values])
+    return out.reshape(out.shape[1:]) if len(batch_dims) == 0 else out
+
+
 def lattice_comparison(lattice_I_dict, lattice_I_orig_dict, I, I_orig):
     """
     Compare simulation lattice and header data against a template to identify differences.
@@ -374,19 +401,6 @@ def add_datapoints(batch_dims,
             - summary_table (list): Updated summary table with this simulation's entry appended.
     """
     D = SimulatedDataPoint2()
-    num_pts = len(I_list)
-    
-    # Add initial particles - create array or scalar depending on batch_dims
-    if len(batch_dims) == 0:
-        # Single simulation: wrap ParticleGroup in 0-D object array
-        initial_particles_data = np.empty((), dtype=object)
-        initial_particles_data[()] = I_list[0].particles['initial_particles']
-    else:
-        # Multiple simulations: create 1D object array to hold ParticleGroup objects
-        initial_particles_data = np.empty(num_pts, dtype=object)
-        for i in range(len(I_list)):
-            initial_particles_data[i] = I_list[i].particles['initial_particles']
-    D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location='VCCF', data=initial_particles_data, attrs={}, data_name='initial_particles', units='', location_primary=True, read_only=False)
     
     # Mapping from Impact particle key to Data Standard data_name and drift z-position.
     # drift_to_z() centers each ParticleGroup at the exact screen location,
@@ -394,26 +408,27 @@ def add_datapoints(batch_dims,
     PG_DATA_NAMES = {"PR10241": "241_particles", "L0AFEND": "L0AFEND_particles"}
     PG_DRIFT_Z = {"PR10241": 0.942084, "L0AFEND": 4.127448}
 
-    # Add particle data at intermediate screen/observer locations
-    # These are the particle distributions captured at various points along the beamline
-    for key, value in I_list[0].output['particles'].items():
-        if key != 'final_particles' and key != 'initial_particles':
-            if len(batch_dims) == 0:
-                particle_data = np.empty((), dtype=object)
-                P = I_list[0].output['particles'][key]
-                if key in PG_DRIFT_Z:
-                    P.drift_to_z(z=PG_DRIFT_Z[key])
-                particle_data[()] = P
-            else:
-                particle_data = np.empty(num_pts, dtype=object)
-                for i in range(len(I_list)):
-                    P = I_list[i].output['particles'][key]
-                    if key in PG_DRIFT_Z:
-                        P.drift_to_z(z=PG_DRIFT_Z[key])
-                    particle_data[i] = P
+    # The final particles are recorded at the lattice 'stop' element
+    stop_element = next((elem['name'] for elem in I_list[0].input['lattice'] if elem.get('type') == 'stop'), 'stop')
+
+    # Add particle data: initial (cathode, an input), intermediate screens/observers and final particles
+    for key in I_list[0].output['particles']:
+        if key == 'initial_particles':
+            location, data_name, read_only = 'VCCF', 'initial_particles', False
+        elif key == 'final_particles':
+            location, data_name, read_only = stop_element, 'final_particles', True
+        else:
             # Use data_name above (e.g. "241_particles")
-            data_name = PG_DATA_NAMES.get(key, key + "_particles")
-            D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=key, data=particle_data, attrs={}, data_name=data_name, units='', location_primary=True, read_only=True)
+            location, data_name, read_only = key, PG_DATA_NAMES.get(key, key + "_particles"), True
+        particles = []
+        for I in I_list:
+            P = I.output['particles'][key]
+            if key in PG_DRIFT_Z:
+                P.drift_to_z(z=PG_DRIFT_Z[key])
+            particles.append(P)
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=location,
+                         data=batch_array(particles, batch_dims, same=particle_groups_equal), attrs={},
+                         data_name=data_name, units='', read_only=read_only)
     
     # Add lattice configuration files (rfdata files, YAML templates, etc.)
     D.add_lattice(lattice_location='included', lattice_files=rfdata_contents)
@@ -430,33 +445,18 @@ def add_datapoints(batch_dims,
         simulation_version=SIMULATION_VERSION
         )
     
-    # Add simulation statistics along the beamline
-    # These include emittance, beam size, energy, etc. at multiple z-locations
-    first_locations = None
-    for key, value in I_list[0].output['stats'].items():
-        if key != 'mean_z':
-            if len(batch_dims) == 0:
-                # Single simulation: 1D array of values at different z-locations
-                stat_data = np.array(I_list[0].output['stats'][key])
-            else:
-                # Reshape to 2D array: (num_simulations, num_z_locations)
-                stat_data = np.empty((num_pts, len(I_list[0].output['stats'][key])))
-                for i in range(len(I_list)):
-                    stat_data[i,:] = np.array(I_list[i].output['stats'][key]).reshape(1, -1)
-            
-                    # Store first location array for reference (locations may vary between simulations)
-                    if first_locations is None:
-                        first_locations = I_list[i].output['stats']['mean_z']
-            
-            # For single simulation, get locations from the first (and only) simulation
-            if len(batch_dims) == 0 and first_locations is None:
-                first_locations = I_list[0].output['stats']['mean_z'].tolist()
-
-            # Add observable with appropriate units
-            if key in output_unit_list:
-                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units=output_unit_list[key], location_units='m', location_primary=False, read_only=True)
-            else:
-                D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=first_locations, data=stat_data, attrs={}, data_name=key, units="unitless", location_units='m', location_primary=False, read_only=True)
+    # Add simulation statistics along the beamline (emittance, beam size, energy, z position, ...).
+    # Impact-T tracks in time, so the shared coordinate (DATA_LOCATIONS) is the time t of each output step.
+    # Known limitation: within a batch the time grid differs slightly between simulations (by a few ps
+    # after a change in output cadence); DATA_LOCATIONS holds the first simulation's times.
+    times = np.asarray(I_list[0].output['stats']['t'])
+    for key in I_list[0].output['stats']:
+        if key == 't':
+            continue
+        stat_data = batch_array([np.asarray(I.output['stats'][key]) for I in I_list], batch_dims, same=np.array_equal)
+        D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=times, data=stat_data, attrs={},
+                         data_name=key, units=output_unit_list.get(key, "unitless"), location_units='s',
+                         location_group='multi_location_data_impact', read_only=True)
     
     # Verify consistency across all simulations in the batch
     # Assert all data_dicts have the same keys (all simulations should vary the same parameters)
@@ -490,12 +490,8 @@ def add_datapoints(batch_dims,
             "units": units
         }
         
-        # Get the data array for this parameter (one value per simulation)
-        scalar_data = master_dict[col]
-        
-        # For single simulation (len(batch_dims)==0), extract scalar value
-        if len(batch_dims) == 0:
-            scalar_data = scalar_data[0]
+        # One value per simulation; stored once (shape (1,)) if identical across the batch
+        scalar_data = batch_array(list(master_dict[col]), batch_dims, same=np.array_equal)
         
         # Add as observable with read_only=False to indicate it's a settable input parameter
         D.add_observable(batch_dims=batch_dims, num_feature_dims=0, location=scalar_inputs[col]['location'], data=scalar_data, data_name=scalar_inputs[col]['name'], units=scalar_inputs[col]['units'], location_primary=True, read_only=False)

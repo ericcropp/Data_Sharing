@@ -19,6 +19,7 @@ import numpy as np
 from pathlib import Path
 
 from data_standard import validate_file
+from data_standard.Data_Standard_2 import VERSION
 
 
 # Get the root directory of the project
@@ -127,6 +128,70 @@ def test_output_hdf5_structure(temp_output_dir, check_data_available):
         report = validate_file(h5_file)
         assert report.ok, report.format()
         assert report.warnings == [], report.format()
+
+
+def _run_example(temp_output_dir):
+    cmd = [
+        sys.executable,
+        str(EXAMPLES_DIR / "FACET-II_Simulation_Example.py"),
+        "--input_dir", str(DATA_INPUT_DIR),
+        "--output_dir", str(temp_output_dir),
+        "--lattice_dir", str(LATTICE_FILES_DIR),
+        "--Combine_Files", "False",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    return list(Path(temp_output_dir).glob("*.h5"))
+
+
+def _check_multi_location_time(obs, batch_dims):
+    mld = obs['multi_location_data_impact']
+    assert mld['DATA_LOCATIONS'].attrs['units'] == 's'
+    assert 'mean_z' in mld and 't' not in mld
+    n_steps = mld['DATA_LOCATIONS'].shape[0]
+    assert mld['mean_z'].shape == batch_dims + (n_steps,)
+
+
+@pytest.mark.slow
+def test_single_simulation_layout(temp_output_dir, check_data_available):
+    """Single ParticleGroups are flattened under their plain name, final particles are saved,
+    and the statistics use time t as the shared coordinate."""
+    h5_files = _run_example(temp_output_dir)
+    assert h5_files
+    for h5_file in h5_files:
+        with h5py.File(h5_file, 'r') as f:
+            assert len(np.atleast_1d(f.attrs['batch_dims'])) == 0
+            obs = f['observables']
+            _check_multi_location_time(obs, ())
+            for name, loc in (('initial_particles', 'VCCF'), ('241_particles', 'PR10241'),
+                              ('L0AFEND_particles', 'L0AFEND')):
+                assert obs[name].attrs['location'] == loc
+            assert obs['stop_1']['final_particles'].attrs['location'] == 'stop_1'
+
+
+@pytest.mark.slow
+def test_batched_simulation_layout():
+    """In the batched data point of the full example output, per-shot ParticleGroups stay in their
+    location groups and inputs that are constant across the batch are stored once (shape (1,))."""
+    combined = EXAMPLES_DIR / "data" / "output" / "FACET-II_Simulation_Example" / f"FACET-II_Simulation_Example_v{VERSION}.h5"
+    if not combined.exists():
+        pytest.skip(f"{combined} not found. Run FACET-II_Simulation_Example.py first.")
+    with h5py.File(combined, 'r') as f:
+        batched = [f[uid] for uid in f.attrs['IDs'] if len(np.atleast_1d(f[uid].attrs['batch_dims'])) == 1]
+        assert batched, "Expected a batched data point"
+        g = batched[0]
+        n = int(np.atleast_1d(g.attrs['batch_dims'])[0])
+        obs = g['observables']
+        _check_multi_location_time(obs, (n,))
+        for loc, name in (('VCCF', 'initial_particles'), ('PR10241', '241_particles'),
+                          ('L0AFEND', 'L0AFEND_particles'), ('stop_1', 'final_particles')):
+            for i in range(n):
+                assert obs[loc][f'{name}_{i}'].attrs['location'] == loc
+            assert not any(k.startswith(name) for k in obs)
+        assert obs['header']['header:Np'].shape == (1,)
+        assert obs['GUNF']['GUNF:theta0_deg'].shape == (n,)
+    report = validate_file(combined)
+    assert report.ok and report.warnings == [], report.format()
 
 
 @pytest.mark.slow
